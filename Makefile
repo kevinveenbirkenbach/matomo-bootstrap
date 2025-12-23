@@ -83,7 +83,7 @@ deps-e2e: venv
 	@$(VENV_PIP) install -e ".[e2e]"
 
 playwright-install: deps-e2e
-	@$(VENV_PY) -m playwright install chromium chromium-headless-shell
+	@$(VENV_PY) -m playwright install chromium
 
 e2e-up:
 	$(COMPOSE) up -d
