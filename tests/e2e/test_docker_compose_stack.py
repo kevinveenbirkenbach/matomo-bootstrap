@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import subprocess
 import time
 import unittest
@@ -8,16 +7,25 @@ import urllib.request
 
 
 COMPOSE_FILE = os.environ.get("MATOMO_STACK_COMPOSE_FILE", "docker-compose.yml")
-MATOMO_HOST_URL = os.environ.get("MATOMO_STACK_URL", "http://127.0.0.1:8080")
+
+# Pick a non-default port to avoid collisions with other CI stacks that use 8080
+MATOMO_PORT = os.environ.get("MATOMO_PORT", "18080")
+MATOMO_HOST_URL = os.environ.get("MATOMO_STACK_URL", f"http://127.0.0.1:{MATOMO_PORT}")
 
 # How long we wait for Matomo HTTP to respond at all (seconds)
 WAIT_TIMEOUT_SECONDS = int(os.environ.get("MATOMO_STACK_WAIT_TIMEOUT", "180"))
 
 
-def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
+def _run(
+    cmd: list[str],
+    *,
+    check: bool = True,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         cmd,
         check=check,
+        env={**os.environ, **(extra_env or {})},
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -55,7 +63,7 @@ class TestRootDockerComposeStack(unittest.TestCase):
     1) docker compose down -v
     2) docker compose build bootstrap
     3) docker compose up -d db matomo
-    4) wait for Matomo HTTP on host port (default 8080)
+    4) wait for Matomo HTTP on host port (default 8080, overridden here)
     5) docker compose run --rm bootstrap -> token on stdout
     6) validate token via Matomo API call
     7) docker compose down -v (cleanup)
@@ -63,26 +71,46 @@ class TestRootDockerComposeStack(unittest.TestCase):
 
     def setUp(self) -> None:
         # Always start from a clean slate (also clears volumes)
-        _run(_compose_cmd("down", "-v"), check=False)
+        _run(
+            _compose_cmd("down", "-v"),
+            check=False,
+            extra_env={"MATOMO_PORT": MATOMO_PORT},
+        )
 
     def tearDown(self) -> None:
         # Cleanup even if assertions fail
-        _run(_compose_cmd("down", "-v"), check=False)
+        _run(
+            _compose_cmd("down", "-v"),
+            check=False,
+            extra_env={"MATOMO_PORT": MATOMO_PORT},
+        )
 
     def test_root_docker_compose_yml_stack_bootstraps_and_token_works(self) -> None:
         # Build bootstrap image from Dockerfile (as defined in docker-compose.yml)
-        build = _run(_compose_cmd("build", "bootstrap"), check=True)
+        build = _run(
+            _compose_cmd("build", "bootstrap"),
+            check=True,
+            extra_env={"MATOMO_PORT": MATOMO_PORT},
+        )
         self.assertEqual(build.returncode, 0, build.stderr)
 
         # Start db + matomo (bootstrap is one-shot and started via "run")
-        up = _run(_compose_cmd("up", "-d", "db", "matomo"), check=True)
+        up = _run(
+            _compose_cmd("up", "-d", "db", "matomo"),
+            check=True,
+            extra_env={"MATOMO_PORT": MATOMO_PORT},
+        )
         self.assertEqual(up.returncode, 0, up.stderr)
 
         # Wait until Matomo answers on the published port
         _wait_for_http_any_status(MATOMO_HOST_URL + "/", WAIT_TIMEOUT_SECONDS)
 
         # Run bootstrap: it should print ONLY the token to stdout
-        boot = _run(_compose_cmd("run", "--rm", "bootstrap"), check=True)
+        boot = _run(
+            _compose_cmd("run", "--rm", "bootstrap"),
+            check=True,
+            extra_env={"MATOMO_PORT": MATOMO_PORT},
+        )
 
         token = (boot.stdout or "").strip()
         self.assertRegex(

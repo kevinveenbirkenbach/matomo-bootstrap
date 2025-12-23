@@ -24,7 +24,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - "${MATOMO_PORT:-8080}:80"
     environment:
       MATOMO_DATABASE_HOST: db
       MATOMO_DATABASE_ADAPTER: mysql
@@ -57,7 +57,7 @@ services:
 
       # Installer flow values
       MATOMO_SITE_NAME: "Matomo (docker-compose)"
-      MATOMO_SITE_URL: "http://127.0.0.1:8080"
+      MATOMO_SITE_URL: "http://127.0.0.1:${MATOMO_PORT:-8080}"
       MATOMO_TIMEZONE: "Germany - Berlin"
 
       # Optional stability knobs
