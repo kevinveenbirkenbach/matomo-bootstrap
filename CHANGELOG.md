@@ -1,3 +1,8 @@
+## [1.1.0] - 2025-12-23
+
+* Implemented bootstrap docker image to auto install matomo in docker compose
+
+
 ## [1.0.1] - 2025-12-23
 
 * * Support for running `matomo-bootstrap` **fully via Nix** in a clean, containerized environment.
