@@ -1,0 +1,74 @@
+services:
+  db:
+    image: mariadb:11
+    container_name: matomo-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: matomo
+      MARIADB_USER: matomo
+      MARIADB_PASSWORD: matomo_pw
+      MARIADB_ROOT_PASSWORD: root_pw
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -proot_pw --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  matomo:
+    image: matomo:5.3.2
+    container_name: matomo
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      MATOMO_DATABASE_HOST: db
+      MATOMO_DATABASE_ADAPTER: mysql
+      MATOMO_DATABASE_USERNAME: matomo
+      MATOMO_DATABASE_PASSWORD: matomo_pw
+      MATOMO_DATABASE_DBNAME: matomo
+    volumes:
+      - matomo_data:/var/www/html
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: matomo-bootstrap:local
+    container_name: matomo-bootstrap
+    depends_on:
+      matomo:
+        condition: service_started
+    environment:
+      MATOMO_URL: "http://matomo"
+      MATOMO_ADMIN_USER: "administrator"
+      MATOMO_ADMIN_PASSWORD: "AdminSecret123!"
+      MATOMO_ADMIN_EMAIL: "administrator@example.org"
+      MATOMO_TOKEN_DESCRIPTION: "docker-compose-bootstrap"
+
+      # Installer flow values
+      MATOMO_SITE_NAME: "Matomo (docker-compose)"
+      MATOMO_SITE_URL: "http://127.0.0.1:8080"
+      MATOMO_TIMEZONE: "Germany - Berlin"
+
+      # Optional stability knobs
+      MATOMO_TIMEOUT: "30"
+      MATOMO_PLAYWRIGHT_HEADLESS: "1"
+      MATOMO_PLAYWRIGHT_NAV_TIMEOUT_MS: "60000"
+      MATOMO_PLAYWRIGHT_SLOWMO_MS: "0"
+    # bootstrap is a one-shot command that prints the token and exits
+    # if you want to re-run, do: docker compose run --rm bootstrap
+    restart: "no"
+
+volumes:
+  mariadb_data:
+  matomo_data:
