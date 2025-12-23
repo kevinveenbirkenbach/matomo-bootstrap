@@ -70,7 +70,10 @@ class MatomoApi:
                 err_body = exc.read().decode("utf-8", errors="replace")
             except Exception:
                 err_body = ""
-            _dbg(f"[auth] logme HTTPError {exc.code} body[:120]={err_body[:120]!r}", self.debug)
+            _dbg(
+                f"[auth] logme HTTPError {exc.code} body[:120]={err_body[:120]!r}",
+                self.debug,
+            )
 
     def create_app_specific_token(
         self,
@@ -85,7 +88,9 @@ class MatomoApi:
         """
         env_token = os.environ.get("MATOMO_BOOTSTRAP_TOKEN_AUTH")
         if env_token:
-            _dbg("[auth] Using MATOMO_BOOTSTRAP_TOKEN_AUTH from environment.", self.debug)
+            _dbg(
+                "[auth] Using MATOMO_BOOTSTRAP_TOKEN_AUTH from environment.", self.debug
+            )
             return env_token
 
         self.login_via_logme(admin_user, admin_password)
@@ -102,10 +107,15 @@ class MatomoApi:
             },
         )
 
-        _dbg(f"[auth] createAppSpecificTokenAuth HTTP {status} body[:200]={body[:200]!r}", self.debug)
+        _dbg(
+            f"[auth] createAppSpecificTokenAuth HTTP {status} body[:200]={body[:200]!r}",
+            self.debug,
+        )
 
         if status != 200:
-            raise TokenCreationError(f"HTTP {status} during token creation: {body[:400]}")
+            raise TokenCreationError(
+                f"HTTP {status} during token creation: {body[:400]}"
+            )
 
         data = _try_json(body)
         token = data.get("value") if isinstance(data, dict) else None

@@ -30,12 +30,18 @@ class TestMatomoBootstrapE2E(unittest.TestCase):
             "e2e-test-token",
         ]
 
-        token = subprocess.check_output(
-            cmd,
-            env={**os.environ, "PYTHONPATH": "src"},
-        ).decode().strip()
+        token = (
+            subprocess.check_output(
+                cmd,
+                env={**os.environ, "PYTHONPATH": "src"},
+            )
+            .decode()
+            .strip()
+        )
 
-        self.assertRegex(token, r"^[a-f0-9]{32,64}$", f"Expected token_auth, got: {token}")
+        self.assertRegex(
+            token, r"^[a-f0-9]{32,64}$", f"Expected token_auth, got: {token}"
+        )
 
         api_url = (
             f"{MATOMO_URL}/index.php"

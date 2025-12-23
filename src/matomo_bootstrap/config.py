@@ -13,7 +13,9 @@ class Config:
     token_description: str = "matomo-bootstrap"
     timeout: int = 20
     debug: bool = False
-    matomo_container_name: str | None = None  # optional, for future console installer usage
+    matomo_container_name: str | None = (
+        None  # optional, for future console installer usage
+    )
 
 
 def config_from_env_and_args(args) -> Config:
@@ -21,9 +23,15 @@ def config_from_env_and_args(args) -> Config:
     Build a Config object from CLI args (preferred) and environment variables (fallback).
     """
     base_url = getattr(args, "base_url", None) or os.environ.get("MATOMO_URL")
-    admin_user = getattr(args, "admin_user", None) or os.environ.get("MATOMO_ADMIN_USER")
-    admin_password = getattr(args, "admin_password", None) or os.environ.get("MATOMO_ADMIN_PASSWORD")
-    admin_email = getattr(args, "admin_email", None) or os.environ.get("MATOMO_ADMIN_EMAIL")
+    admin_user = getattr(args, "admin_user", None) or os.environ.get(
+        "MATOMO_ADMIN_USER"
+    )
+    admin_password = getattr(args, "admin_password", None) or os.environ.get(
+        "MATOMO_ADMIN_PASSWORD"
+    )
+    admin_email = getattr(args, "admin_email", None) or os.environ.get(
+        "MATOMO_ADMIN_EMAIL"
+    )
 
     token_description = (
         getattr(args, "token_description", None)
@@ -31,7 +39,9 @@ def config_from_env_and_args(args) -> Config:
         or "matomo-bootstrap"
     )
 
-    timeout = int(getattr(args, "timeout", None) or os.environ.get("MATOMO_TIMEOUT") or "20")
+    timeout = int(
+        getattr(args, "timeout", None) or os.environ.get("MATOMO_TIMEOUT") or "20"
+    )
     debug = bool(getattr(args, "debug", False))
 
     matomo_container_name = (

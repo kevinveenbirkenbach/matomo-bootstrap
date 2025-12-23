@@ -11,11 +11,15 @@ from ..config import Config
 
 
 # Optional knobs (mostly for debugging / CI stability)
-PLAYWRIGHT_HEADLESS = (
-    os.environ.get("MATOMO_PLAYWRIGHT_HEADLESS", "1").strip() not in ("0", "false", "False")
+PLAYWRIGHT_HEADLESS = os.environ.get("MATOMO_PLAYWRIGHT_HEADLESS", "1").strip() not in (
+    "0",
+    "false",
+    "False",
 )
 PLAYWRIGHT_SLOWMO_MS = int(os.environ.get("MATOMO_PLAYWRIGHT_SLOWMO_MS", "0"))
-PLAYWRIGHT_NAV_TIMEOUT_MS = int(os.environ.get("MATOMO_PLAYWRIGHT_NAV_TIMEOUT_MS", "60000"))
+PLAYWRIGHT_NAV_TIMEOUT_MS = int(
+    os.environ.get("MATOMO_PLAYWRIGHT_NAV_TIMEOUT_MS", "60000")
+)
 
 # Values used by the installer flow (recorded)
 DEFAULT_SITE_NAME = os.environ.get("MATOMO_SITE_NAME", "localhost")
@@ -49,10 +53,14 @@ def wait_http(url: str, timeout: int = 180) -> None:
         except Exception as exc:
             last_err = exc
             if i % 5 == 0:
-                _log(f"[install] still waiting ({i}/{timeout}) … ({type(exc).__name__})")
+                _log(
+                    f"[install] still waiting ({i}/{timeout}) … ({type(exc).__name__})"
+                )
             time.sleep(1)
 
-    raise RuntimeError(f"Matomo did not become reachable after {timeout}s: {url} ({last_err})")
+    raise RuntimeError(
+        f"Matomo did not become reachable after {timeout}s: {url} ({last_err})"
+    )
 
 
 def is_installed(url: str) -> bool:
@@ -64,11 +72,19 @@ def is_installed(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=5) as resp:
             html = resp.read().decode(errors="ignore").lower()
-        return ("module=login" in html) or ("matomo › login" in html) or ("matomo/login" in html)
+        return (
+            ("module=login" in html)
+            or ("matomo › login" in html)
+            or ("matomo/login" in html)
+        )
     except urllib.error.HTTPError as exc:
         try:
             html = exc.read().decode(errors="ignore").lower()
-            return ("module=login" in html) or ("matomo › login" in html) or ("matomo/login" in html)
+            return (
+                ("module=login" in html)
+                or ("matomo › login" in html)
+                or ("matomo/login" in html)
+            )
         except Exception:
             return False
     except Exception:
@@ -143,7 +159,9 @@ class WebInstaller(Installer):
                     loc.first.click()
                     return
 
-                raise RuntimeError("Could not find a Next/Continue control in the installer UI.")
+                raise RuntimeError(
+                    "Could not find a Next/Continue control in the installer UI."
+                )
 
             page.goto(base_url, wait_until="domcontentloaded")
 
@@ -157,7 +175,9 @@ class WebInstaller(Installer):
                 page.wait_for_load_state("domcontentloaded")
                 page.wait_for_timeout(200)
             else:
-                raise RuntimeError("Installer did not reach superuser step (login-0 not found).")
+                raise RuntimeError(
+                    "Installer did not reach superuser step (login-0 not found)."
+                )
 
             page.locator("#login-0").click()
             page.locator("#login-0").fill(config.admin_user)
