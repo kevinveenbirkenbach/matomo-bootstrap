@@ -1,4 +1,5 @@
 import http.cookiejar
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Dict, Tuple
@@ -23,9 +24,18 @@ class HttpClient:
             print(f"[HTTP] GET {url}")
 
         req = urllib.request.Request(url, method="GET")
-        with self.opener.open(req, timeout=self.timeout) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return resp.status, body
+
+        try:
+            with self.opener.open(req, timeout=self.timeout) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                return resp.status, body
+        except urllib.error.HTTPError as exc:
+            # urllib raises HTTPError for 4xx/5xx but it still contains status + body
+            try:
+                body = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                body = str(exc)
+            return exc.code, body
 
     def post(self, path: str, data: Dict[str, str]) -> Tuple[int, str]:
         url = self.base_url + path
@@ -35,6 +45,14 @@ class HttpClient:
             print(f"[HTTP] POST {url} keys={list(data.keys())}")
 
         req = urllib.request.Request(url, data=encoded, method="POST")
-        with self.opener.open(req, timeout=self.timeout) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return resp.status, body
+
+        try:
+            with self.opener.open(req, timeout=self.timeout) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                return resp.status, body
+        except urllib.error.HTTPError as exc:
+            try:
+                body = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                body = str(exc)
+            return exc.code, body

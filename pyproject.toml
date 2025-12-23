@@ -12,12 +12,13 @@ authors = [{ name = "Kevin Veen-Birkenbach", email = "kevin@veen.world" }]
 license = { text = "All rights reserved by Kevin Veen-Birkenbach" }
 urls = { Homepage = "https://github.com/kevinveenbirkenbach/matomo-bootstrap" }
 
-dependencies = []
-
-[project.optional-dependencies]
-e2e = [
+# Playwright is needed at runtime to run the web installer when Matomo is not yet installed.
+dependencies = [
   "playwright>=1.40.0",
 ]
+
+[project.optional-dependencies]
+e2e = []
 
 [tool.setuptools]
 package-dir = { "" = "src" }

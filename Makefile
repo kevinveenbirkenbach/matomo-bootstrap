@@ -63,6 +63,7 @@ e2e-install: playwright-install
 	MATOMO_ADMIN_PASSWORD="$(MATOMO_ADMIN_PASSWORD)" \
 	MATOMO_ADMIN_EMAIL="$(MATOMO_ADMIN_EMAIL)" \
 	MATOMO_TOKEN_DESCRIPTION="$(MATOMO_TOKEN_DESCRIPTION)" \
+	MATOMO_CONTAINER_NAME="e2e-matomo" \
 	PYTHONPATH=src $(VENV_PY) -m matomo_bootstrap
 
 e2e-test: deps-e2e

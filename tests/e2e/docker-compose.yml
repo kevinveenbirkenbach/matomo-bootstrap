@@ -1,6 +1,7 @@
 services:
   db:
     image: mariadb:11
+    container_name: e2e-db
     environment:
       MARIADB_DATABASE: matomo
       MARIADB_USER: matomo
@@ -14,6 +15,7 @@ services:
 
   matomo:
     image: matomo:5.3.2
+    container_name: e2e-matomo
     depends_on:
       db:
         condition: service_healthy
