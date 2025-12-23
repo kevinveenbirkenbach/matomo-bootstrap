@@ -27,3 +27,50 @@ services:
       MATOMO_DATABASE_USERNAME: matomo
       MATOMO_DATABASE_PASSWORD: matomo_pw
       MATOMO_DATABASE_DBNAME: matomo
+
+  nix:
+    image: nixos/nix:latest
+    container_name: e2e-nix
+    depends_on:
+      matomo:
+        condition: service_started
+
+    # Run as root to avoid /nix big-lock permission issues
+    user: "0:0"
+    working_dir: /work
+
+    volumes:
+      # Project root as flake
+      - ../../:/work:ro
+
+      # Nix store (removed by docker compose down -v)
+      - e2e_nix_store:/nix
+
+      # HOME/XDG for nix + playwright
+      - e2e_nix_home:/tmp/home
+
+    environment:
+      NIX_CONFIG: "experimental-features = nix-command flakes"
+      TERM: "xterm"
+
+      HOME: "/tmp/home"
+      USER: "root"
+      LOGNAME: "root"
+      XDG_CACHE_HOME: "/tmp/home/.cache"
+      XDG_CONFIG_HOME: "/tmp/home/.config"
+      XDG_DATA_HOME: "/tmp/home/.local/share"
+
+      MATOMO_SITE_NAME: "Matomo E2E"
+      MATOMO_SITE_URL: "http://127.0.0.1:8080"
+      MATOMO_TIMEZONE: "Germany - Berlin"
+
+    command: >
+      sh -lc "mkdir -p /tmp/home/.cache /tmp/home/.config /tmp/home/.local/share;
+              tail -f /dev/null"
+
+    # Allow access to host-published Matomo port
+    network_mode: host
+
+volumes:
+  e2e_nix_store:
+  e2e_nix_home:

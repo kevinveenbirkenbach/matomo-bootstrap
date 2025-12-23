@@ -23,12 +23,15 @@
           pyproject = true;
           src = self;
 
-          # Runtime deps (Python)
+          nativeBuildInputs = with python.pkgs; [
+            setuptools
+            wheel
+          ];
+
           propagatedBuildInputs = with python.pkgs; [
             playwright
           ];
 
-          # Optional: keep tests off in nix build by default
           doCheck = false;
 
           meta = with pkgs.lib; {
@@ -46,16 +49,22 @@
     apps = forAllSystems (system:
       let
         pkgs = import nixpkgs { inherit system; };
+        python = pkgs.python312;
+
+        pythonPlaywright = python.withPackages (ps: [
+          ps.playwright
+        ]);
+
         matomo = self.packages.${system}.matomo-bootstrap;
 
         playwright-install = pkgs.writeShellApplication {
           name = "matomo-bootstrap-playwright-install";
-          runtimeInputs = [ matomo ];
+          runtimeInputs = [ pythonPlaywright ];
+
           text = ''
-            # Installs the Playwright Chromium browser into the user cache.
-            # This is needed when the Matomo instance is not installed yet and
-            # the web installer must be driven via Playwright.
-            exec ${matomo}/bin/python -m playwright install chromium
+            # Install Playwright browsers.
+            # IMPORTANT: Do not print anything to stdout (tests expect token-only stdout).
+            exec ${pythonPlaywright}/bin/python -m playwright install chromium 1>&2
           '';
         };
       in
