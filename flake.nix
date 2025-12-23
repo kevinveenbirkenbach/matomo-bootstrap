@@ -15,6 +15,7 @@
       let
         pkgs = import nixpkgs { inherit system; };
         python = pkgs.python312;
+        playwrightDriver = pkgs.playwright-driver;
       in
       rec {
         matomo-bootstrap = python.pkgs.buildPythonApplication {
@@ -22,17 +23,38 @@
           version = "1.0.1"; # keep in sync with pyproject.toml
           pyproject = true;
           src = self;
-          pythonImportsCheck = [ ];  # disable import-check phase (prevents Playwright/installer side effects)
-          nativeBuildInputs = with python.pkgs; [
-            setuptools
-            wheel
-          ];
+
+          # disable import-check phase (prevents Playwright/installer side effects)
+          pythonImportsCheck = [ ];
+
+          nativeBuildInputs =
+            (with python.pkgs; [
+              setuptools
+              wheel
+            ])
+            ++ [
+              pkgs.makeWrapper
+            ];
 
           propagatedBuildInputs = with python.pkgs; [
             playwright
           ];
 
           doCheck = false;
+
+          # IMPORTANT (Nix):
+          # Do NOT let Playwright download ubuntu/fhs browser binaries into ~/.cache/ms-playwright.
+          # Instead, point Playwright to nixpkgs-provided browsers (playwright-driver).
+          #
+          # This fixes errors like:
+          #   BrowserType.launch ... headless_shell ENOENT
+          #
+          # ...which happens when Playwright downloads a fallback ubuntu build that cannot run on NixOS.
+          postFixup = ''
+            wrapProgram "$out/bin/matomo-bootstrap" \
+              --set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD 1 \
+              --set PLAYWRIGHT_BROWSERS_PATH "${playwrightDriver.browsers}"
+          '';
 
           meta = with pkgs.lib; {
             description = "Headless bootstrap tooling for Matomo (installation + API token provisioning)";
@@ -50,6 +72,7 @@
       let
         pkgs = import nixpkgs { inherit system; };
         python = pkgs.python312;
+        playwrightDriver = pkgs.playwright-driver;
 
         pythonPlaywright = python.withPackages (ps: [
           ps.playwright
@@ -62,9 +85,20 @@
           runtimeInputs = [ pythonPlaywright ];
 
           text = ''
-            # Install Playwright browsers.
+            # Nix mode: NO browser downloads.
+            #
+            # Playwright upstream "install" downloads ubuntu/fhs browser binaries into ~/.cache/ms-playwright.
+            # Those binaries often don't run on NixOS, producing ENOENT on launch (missing loader/libs).
+            #
+            # We keep this app for backwards-compat (tests/docs call it), but it is intentionally a NO-OP.
+            #
             # IMPORTANT: Do not print anything to stdout (tests expect token-only stdout).
-            exec ${pythonPlaywright}/bin/python -m playwright install chromium chromium-headless-shell 1>&2
+            {
+              echo "Playwright browsers are provided by nixpkgs (playwright-driver)."
+              echo "Using PLAYWRIGHT_BROWSERS_PATH=${playwrightDriver.browsers}"
+              echo "Set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 to prevent downloads."
+            } 1>&2
+            exit 0
           '';
         };
       in
