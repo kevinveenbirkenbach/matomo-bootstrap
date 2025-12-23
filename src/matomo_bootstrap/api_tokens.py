@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import sys
 import urllib.error
 
 from .errors import TokenCreationError
@@ -18,20 +19,21 @@ def _try_json(body: str) -> object:
         raise TokenCreationError(f"Invalid JSON from Matomo API: {body[:400]}") from exc
 
 
+def _dbg(msg: str, enabled: bool) -> None:
+    if enabled:
+        # IMPORTANT: keep stdout clean (tests expect only token on stdout)
+        print(msg, file=sys.stderr)
+
+
 def _login_via_logme(client: HttpClient, admin_user: str, admin_password: str, debug: bool) -> None:
     """
     Create an authenticated Matomo session (cookie jar) using the classic Login controller.
 
     Matomo accepts the md5 hashed password in the `password` parameter for action=logme.
     We rely on urllib's opener to follow redirects and store cookies.
-
-    If this ever stops working in a future Matomo version, the next step would be:
-    - GET the login page, extract CSRF/nonce, then POST the login form.
     """
     md5_password = _md5(admin_password)
 
-    # Hit the login endpoint; cookies should be set in the client's CookieJar.
-    # We treat any HTTP response as "we reached the login controller" – later API call will tell us if session is valid.
     try:
         status, body = client.get(
             "/index.php",
@@ -42,16 +44,14 @@ def _login_via_logme(client: HttpClient, admin_user: str, admin_password: str, d
                 "password": md5_password,
             },
         )
-        if debug:
-            print(f"[auth] login via logme returned HTTP {status} (body preview: {body[:120]!r})")
+        _dbg(f"[auth] login via logme returned HTTP {status} (body preview: {body[:120]!r})", debug)
     except urllib.error.HTTPError as exc:
         # Even 4xx/5xx can still set cookies; continue and let the API call validate.
-        if debug:
-            try:
-                err_body = exc.read().decode("utf-8", errors="replace")
-            except Exception:
-                err_body = ""
-            print(f"[auth] login via logme raised HTTPError {exc.code} (body preview: {err_body[:120]!r})")
+        try:
+            err_body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = ""
+        _dbg(f"[auth] login via logme raised HTTPError {exc.code} (body preview: {err_body[:120]!r})", debug)
 
 
 def create_app_token_via_session(
@@ -70,8 +70,7 @@ def create_app_token_via_session(
     """
     env_token = os.environ.get("MATOMO_BOOTSTRAP_TOKEN_AUTH")
     if env_token:
-        if debug:
-            print("[auth] Using MATOMO_BOOTSTRAP_TOKEN_AUTH from environment.")
+        _dbg("[auth] Using MATOMO_BOOTSTRAP_TOKEN_AUTH from environment.", debug)
         return env_token
 
     # 1) Establish logged-in session
@@ -90,8 +89,7 @@ def create_app_token_via_session(
         },
     )
 
-    if debug:
-        print(f"[auth] createAppSpecificTokenAuth HTTP {status} body[:200]={body[:200]!r}")
+    _dbg(f"[auth] createAppSpecificTokenAuth HTTP {status} body[:200]={body[:200]!r}", debug)
 
     if status != 200:
         raise TokenCreationError(f"HTTP {status} during token creation: {body[:400]}")
@@ -100,7 +98,6 @@ def create_app_token_via_session(
 
     token = data.get("value") if isinstance(data, dict) else None
     if not token:
-        # Matomo may return {"result":"error","message":"..."}.
         raise TokenCreationError(f"Unexpected response from token creation: {data}")
 
     return str(token)

@@ -1,11 +1,13 @@
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
 
-
 # Optional knobs (mostly for debugging / CI stability)
-PLAYWRIGHT_HEADLESS = os.environ.get("MATOMO_PLAYWRIGHT_HEADLESS", "1").strip() not in ("0", "false", "False")
+PLAYWRIGHT_HEADLESS = (
+    os.environ.get("MATOMO_PLAYWRIGHT_HEADLESS", "1").strip() not in ("0", "false", "False")
+)
 PLAYWRIGHT_SLOWMO_MS = int(os.environ.get("MATOMO_PLAYWRIGHT_SLOWMO_MS", "0"))
 PLAYWRIGHT_NAV_TIMEOUT_MS = int(os.environ.get("MATOMO_PLAYWRIGHT_NAV_TIMEOUT_MS", "60000"))
 
@@ -16,27 +18,33 @@ DEFAULT_TIMEZONE = os.environ.get("MATOMO_TIMEZONE", "Germany - Berlin")
 DEFAULT_ECOMMERCE = os.environ.get("MATOMO_ECOMMERCE", "Ecommerce enabled")
 
 
+def _log(msg: str) -> None:
+    # IMPORTANT: logs must not pollute stdout (tests expect only token on stdout)
+    print(msg, file=sys.stderr)
+
+
 def wait_http(url: str, timeout: int = 180) -> None:
     """
     Consider Matomo 'reachable' as soon as the HTTP server answers - even with 500.
     urllib raises HTTPError for 4xx/5xx, so we must treat that as reachability too.
     """
-    print(f"[install] Waiting for Matomo HTTP at {url} ...")
+    _log(f"[install] Waiting for Matomo HTTP at {url} ...")
     last_err: Exception | None = None
 
     for i in range(timeout):
         try:
             with urllib.request.urlopen(url, timeout=2) as resp:
                 _ = resp.read(128)
-            print("[install] Matomo HTTP reachable (2xx/3xx).")
+            _log("[install] Matomo HTTP reachable (2xx/3xx).")
             return
         except urllib.error.HTTPError as exc:
-            print(f"[install] Matomo HTTP reachable (HTTP {exc.code}).")
+            # 4xx/5xx means the server answered -> reachable
+            _log(f"[install] Matomo HTTP reachable (HTTP {exc.code}).")
             return
         except Exception as exc:
             last_err = exc
             if i % 5 == 0:
-                print(f"[install] still waiting ({i}/{timeout}) … ({type(exc).__name__})")
+                _log(f"[install] still waiting ({i}/{timeout}) … ({type(exc).__name__})")
             time.sleep(1)
 
     raise RuntimeError(f"Matomo did not become reachable after {timeout}s: {url} ({last_err})")
@@ -79,12 +87,12 @@ def ensure_installed(
 
     if is_installed(base_url):
         if debug:
-            print("[install] Matomo already looks installed. Skipping installer.")
+            _log("[install] Matomo already looks installed. Skipping installer.")
         return
 
     from playwright.sync_api import sync_playwright
 
-    print("[install] Running Matomo web installer via Playwright (recorded flow)...")
+    _log("[install] Running Matomo web installer via Playwright (recorded flow)...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -98,7 +106,7 @@ def ensure_installed(
 
         def _dbg(msg: str) -> None:
             if debug:
-                print(f"[install] {msg}")
+                _log(f"[install] {msg}")
 
         def click_next() -> None:
             """
@@ -141,11 +149,6 @@ def ensure_installed(
         # --- Recorded-ish flow, but made variable-based + more stable ---
         page.goto(base_url, wait_until="domcontentloaded")
 
-        # The first few screens can vary slightly (welcome/system check/db etc.).
-        # In your recording, you clicked through multiple Next pages without DB input (env already set in container).
-        # We mimic that: keep clicking "Next" until we see the superuser fields.
-        #
-        # Stop condition: superuser login field appears.
         def superuser_form_visible() -> bool:
             # In your recording, the superuser "Login" field was "#login-0".
             return page.locator("#login-0").count() > 0
@@ -176,7 +179,10 @@ def ensure_installed(
         page.locator("#email-0").fill(admin_email)
 
         # Next
-        page.get_by_role("button", name="Next »").click()
+        if page.get_by_role("button", name="Next »").count() > 0:
+            page.get_by_role("button", name="Next »").click()
+        else:
+            click_next()
 
         # First website
         if page.locator("#siteName-0").count() > 0:
@@ -189,7 +195,6 @@ def ensure_installed(
 
         # Timezone dropdown (best-effort)
         try:
-            # recording: page.get_by_role("combobox").first.click() then listbox text
             page.get_by_role("combobox").first.click()
             page.get_by_role("listbox").get_by_text(DEFAULT_TIMEZONE).click()
         except Exception:
@@ -197,7 +202,6 @@ def ensure_installed(
 
         # Ecommerce dropdown (best-effort)
         try:
-            # recording: combobox nth(2)
             page.get_by_role("combobox").nth(2).click()
             page.get_by_role("listbox").get_by_text(DEFAULT_ECOMMERCE).click()
         except Exception:
@@ -207,26 +211,11 @@ def ensure_installed(
         click_next()
         page.wait_for_load_state("domcontentloaded")
 
-        # In recording: Next link, then Continue to Matomo button
         if page.get_by_role("link", name="Next »").count() > 0:
             page.get_by_role("link", name="Next »").click()
 
         if page.get_by_role("button", name="Continue to Matomo »").count() > 0:
             page.get_by_role("button", name="Continue to Matomo »").click()
-
-        # Optional: login once (not strictly required for token flow, but harmless and matches your recording).
-        # Some UIs have fancy-icon labels; we follow your recorded selectors best-effort.
-        try:
-            user_box = page.get_by_role("textbox", name=" Username or e-mail")
-            pass_box = page.get_by_role("textbox", name=" Password")
-            if user_box.count() > 0 and pass_box.count() > 0:
-                user_box.click()
-                user_box.fill(admin_user)
-                pass_box.fill(admin_password)
-                if page.get_by_role("button", name="Sign in").count() > 0:
-                    page.get_by_role("button", name="Sign in").click()
-        except Exception:
-            _dbg("Post-install login skipped (UI differs).")
 
         context.close()
         browser.close()
@@ -235,4 +224,4 @@ def ensure_installed(
     if not is_installed(base_url):
         raise RuntimeError("[install] Installer did not reach installed state.")
 
-    print("[install] Installation finished.")
+    _log("[install] Installation finished.")
