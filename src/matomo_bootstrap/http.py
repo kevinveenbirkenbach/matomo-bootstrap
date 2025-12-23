@@ -1,6 +1,6 @@
-import urllib.request
-import urllib.parse
 import http.cookiejar
+import urllib.parse
+import urllib.request
 from typing import Dict, Tuple
 
 
@@ -14,6 +14,18 @@ class HttpClient:
         self.opener = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(self.cookies)
         )
+
+    def get(self, path: str, params: Dict[str, str]) -> Tuple[int, str]:
+        qs = urllib.parse.urlencode(params)
+        url = f"{self.base_url}{path}?{qs}"
+
+        if self.debug:
+            print(f"[HTTP] GET {url}")
+
+        req = urllib.request.Request(url, method="GET")
+        with self.opener.open(req, timeout=self.timeout) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return resp.status, body
 
     def post(self, path: str, data: Dict[str, str]) -> Tuple[int, str]:
         url = self.base_url + path

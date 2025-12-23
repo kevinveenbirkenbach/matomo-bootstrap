@@ -8,6 +8,7 @@ import urllib.request
 MATOMO_URL = os.environ.get("MATOMO_URL", "http://127.0.0.1:8080")
 ADMIN_USER = os.environ.get("MATOMO_ADMIN_USER", "administrator")
 ADMIN_PASSWORD = os.environ.get("MATOMO_ADMIN_PASSWORD", "AdminSecret123!")
+ADMIN_EMAIL = os.environ.get("MATOMO_ADMIN_EMAIL", "administrator@example.org")
 
 
 class TestMatomoBootstrapE2E(unittest.TestCase):
@@ -22,6 +23,8 @@ class TestMatomoBootstrapE2E(unittest.TestCase):
             ADMIN_USER,
             "--admin-password",
             ADMIN_PASSWORD,
+            "--admin-email",
+            ADMIN_EMAIL,
             "--token-description",
             "e2e-test-token",
         ]
@@ -34,7 +37,7 @@ class TestMatomoBootstrapE2E(unittest.TestCase):
         self.assertRegex(token, r"^[a-f0-9]{32,64}$", f"Expected token_auth, got: {token}")
 
         api_url = (
-            f"{MATOMO_URL}/api.php"
+            f"{MATOMO_URL}/index.php"
             f"?module=API&method=SitesManager.getSitesWithAtLeastViewAccess"
             f"&format=json&token_auth={token}"
         )

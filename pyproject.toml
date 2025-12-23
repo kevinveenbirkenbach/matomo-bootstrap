@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "matomo-bootstrap"
 version = "0.1.0"
-description = ""
+description = "Headless bootstrap tooling for Matomo (installation + API token provisioning)"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Kevin Veen-Birkenbach", email = "kevin@veen.world" }]
@@ -14,8 +14,13 @@ urls = { Homepage = "https://github.com/kevinveenbirkenbach/matomo-bootstrap" }
 
 dependencies = []
 
+[project.optional-dependencies]
+e2e = [
+  "playwright>=1.40.0",
+]
+
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
