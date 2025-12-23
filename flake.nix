@@ -64,7 +64,7 @@
           text = ''
             # Install Playwright browsers.
             # IMPORTANT: Do not print anything to stdout (tests expect token-only stdout).
-            exec ${pythonPlaywright}/bin/python -m playwright install chromium 1>&2
+            exec ${pythonPlaywright}/bin/python -m playwright install chromium chromium-headless-shell 1>&2
           '';
         };
       in
