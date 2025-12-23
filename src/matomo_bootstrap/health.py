@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import urllib.request
+
 from .errors import MatomoNotReadyError
 
 
@@ -9,5 +12,6 @@ def assert_matomo_ready(base_url: str, timeout: int = 10) -> None:
     except Exception as exc:
         raise MatomoNotReadyError(f"Matomo not reachable: {exc}") from exc
 
-    if "Matomo" not in html and "piwik" not in html.lower():
+    lower = html.lower()
+    if "matomo" not in lower and "piwik" not in lower:
         raise MatomoNotReadyError("Matomo UI not detected at base URL")

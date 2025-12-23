@@ -30,23 +30,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--token-description",
         default=os.environ.get("MATOMO_TOKEN_DESCRIPTION", "matomo-bootstrap"),
+        help="App token description",
     )
-    p.add_argument("--timeout", type=int, default=int(os.environ.get("MATOMO_TIMEOUT", "20")))
-    p.add_argument("--debug", action="store_true")
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=int(os.environ.get("MATOMO_TIMEOUT", "20")),
+        help="Network timeout in seconds (or MATOMO_TIMEOUT env)",
+    )
+    p.add_argument("--debug", action="store_true", help="Enable debug logs on stderr")
 
-    args = p.parse_args()
+    # Optional (future use)
+    p.add_argument(
+        "--matomo-container-name",
+        default=os.environ.get("MATOMO_CONTAINER_NAME"),
+        help="Matomo container name (optional; also MATOMO_CONTAINER_NAME env)",
+    )
 
-    missing = []
-    if not args.base_url:
-        missing.append("--base-url (or MATOMO_URL)")
-    if not args.admin_user:
-        missing.append("--admin-user (or MATOMO_ADMIN_USER)")
-    if not args.admin_password:
-        missing.append("--admin-password (or MATOMO_ADMIN_PASSWORD)")
-    if not args.admin_email:
-        missing.append("--admin-email (or MATOMO_ADMIN_EMAIL)")
-
-    if missing:
-        p.error("missing required values: " + ", ".join(missing))
-
-    return args
+    return p.parse_args()

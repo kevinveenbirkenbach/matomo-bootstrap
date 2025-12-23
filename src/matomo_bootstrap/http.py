@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import http.cookiejar
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,15 +19,11 @@ class HttpClient:
             urllib.request.HTTPCookieProcessor(self.cookies)
         )
 
-    def get(self, path: str, params: Dict[str, str]) -> Tuple[int, str]:
-        qs = urllib.parse.urlencode(params)
-        url = f"{self.base_url}{path}?{qs}"
-
+    def _dbg(self, msg: str) -> None:
         if self.debug:
-            print(f"[HTTP] GET {url}")
+            print(msg, file=sys.stderr)
 
-        req = urllib.request.Request(url, method="GET")
-
+    def _open(self, req: urllib.request.Request) -> Tuple[int, str]:
         try:
             with self.opener.open(req, timeout=self.timeout) as resp:
                 body = resp.read().decode("utf-8", errors="replace")
@@ -37,22 +36,25 @@ class HttpClient:
                 body = str(exc)
             return exc.code, body
 
+    def get(self, path: str, params: Dict[str, str]) -> Tuple[int, str]:
+        qs = urllib.parse.urlencode(params)
+        if path == "/":
+            url = f"{self.base_url}/"
+        else:
+            url = f"{self.base_url}{path}"
+        if qs:
+            url = f"{url}?{qs}"
+
+        self._dbg(f"[HTTP] GET {url}")
+
+        req = urllib.request.Request(url, method="GET")
+        return self._open(req)
+
     def post(self, path: str, data: Dict[str, str]) -> Tuple[int, str]:
         url = self.base_url + path
         encoded = urllib.parse.urlencode(data).encode()
 
-        if self.debug:
-            print(f"[HTTP] POST {url} keys={list(data.keys())}")
+        self._dbg(f"[HTTP] POST {url} keys={list(data.keys())}")
 
         req = urllib.request.Request(url, data=encoded, method="POST")
-
-        try:
-            with self.opener.open(req, timeout=self.timeout) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-                return resp.status, body
-        except urllib.error.HTTPError as exc:
-            try:
-                body = exc.read().decode("utf-8", errors="replace")
-            except Exception:
-                body = str(exc)
-            return exc.code, body
+        return self._open(req)

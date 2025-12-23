@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import unittest
 import urllib.request
 
@@ -14,7 +15,7 @@ ADMIN_EMAIL = os.environ.get("MATOMO_ADMIN_EMAIL", "administrator@example.org")
 class TestMatomoBootstrapE2E(unittest.TestCase):
     def test_bootstrap_creates_api_token(self) -> None:
         cmd = [
-            "python3",
+            sys.executable,
             "-m",
             "matomo_bootstrap",
             "--base-url",
