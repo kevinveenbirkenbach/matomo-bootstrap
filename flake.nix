@@ -22,7 +22,7 @@
           version = "1.0.1"; # keep in sync with pyproject.toml
           pyproject = true;
           src = self;
-
+          pythonImportsCheck = [ ];  # disable import-check phase (prevents Playwright/installer side effects)
           nativeBuildInputs = with python.pkgs; [
             setuptools
             wheel
