@@ -1,0 +1,27 @@
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: matomo
+      MARIADB_USER: matomo
+      MARIADB_PASSWORD: matomo_pw
+      MARIADB_ROOT_PASSWORD: root_pw
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -proot_pw --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  matomo:
+    image: matomo:5.3.2
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      MATOMO_DATABASE_HOST: db
+      MATOMO_DATABASE_ADAPTER: mysql
+      MATOMO_DATABASE_USERNAME: matomo
+      MATOMO_DATABASE_PASSWORD: matomo_pw
+      MATOMO_DATABASE_DBNAME: matomo
