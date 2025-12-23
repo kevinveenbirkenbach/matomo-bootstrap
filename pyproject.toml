@@ -12,7 +12,7 @@ authors = [{ name = "Kevin Veen-Birkenbach", email = "kevin@veen.world" }]
 license = { text = "MIT" }
 urls = { Homepage = "https://github.com/kevinveenbirkenbach/matomo-bootstrap" }
 
-dependencies = ["playwright>=1.46.0"]
+dependencies = ["playwright==1.46.0"]
 
 # Provides a stable CLI name for Nix + pip installs:
 [project.scripts]
