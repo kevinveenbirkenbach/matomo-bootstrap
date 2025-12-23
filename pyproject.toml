@@ -9,16 +9,23 @@ description = "Headless bootstrap tooling for Matomo (installation + API token p
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Kevin Veen-Birkenbach", email = "kevin@veen.world" }]
-license = { text = "All rights reserved by Kevin Veen-Birkenbach" }
+license = { text = "MIT" }
 urls = { Homepage = "https://github.com/kevinveenbirkenbach/matomo-bootstrap" }
 
-# Playwright is needed at runtime to run the web installer when Matomo is not yet installed.
 dependencies = [
   "playwright>=1.40.0",
 ]
 
+# Provides a stable CLI name for Nix + pip installs:
+[project.scripts]
+matomo-bootstrap = "matomo_bootstrap.__main__:main"
+
 [project.optional-dependencies]
 e2e = []
+
+dev = [
+  "ruff",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
