@@ -13,8 +13,9 @@ WORKDIR /app
 
 # Option B: build from source (current repo)
 COPY pyproject.toml README.md LICENSE /app/
+COPY constraints.txt /app/
 COPY src /app/src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir -c /app/constraints.txt .
 
 # Default entrypoint: environment-driven bootstrap
 ENTRYPOINT ["matomo-bootstrap"]
