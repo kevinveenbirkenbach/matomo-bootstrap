@@ -5,61 +5,8 @@ on:
   pull_request:
 
 jobs:
-  lint-and-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Install system deps (curl)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl
-
-      - name: Install Python deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[e2e]"
-          pip install ruff
-
-      - name: Ruff
-        run: |
-          ruff check .
-          ruff format --check .
-
-      # Playwright needs browser binaries on the runner
-      - name: Install Playwright Chromium
-        run: |
-          python -m playwright install --with-deps chromium
-
-      # Run your full E2E cycle using the existing Makefile
-      - name: E2E (docker compose + installer + tests)
-        env:
-          MATOMO_URL: "http://127.0.0.1:8080"
-          MATOMO_ADMIN_USER: "administrator"
-          MATOMO_ADMIN_PASSWORD: "AdminSecret123!"
-          MATOMO_ADMIN_EMAIL: "administrator@example.org"
-          MATOMO_TOKEN_DESCRIPTION: "ci-token"
-        run: |
-          make e2e
-
-      # If E2E fails, this is helpful for debugging
-      - name: Docker logs (on failure)
-        if: failure()
-        run: |
-          docker compose -f tests/e2e/docker-compose.yml ps || true
-          docker compose -f tests/e2e/docker-compose.yml logs --no-color --tail=300 matomo || true
-          docker compose -f tests/e2e/docker-compose.yml logs --no-color --tail=300 db || true
-
-      - name: Cleanup (always)
-        if: always()
-        run: |
-          docker compose -f tests/e2e/docker-compose.yml down -v || true
+  test:
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      python-version: "3.12"
+      matomo-token-description: "ci-token"
