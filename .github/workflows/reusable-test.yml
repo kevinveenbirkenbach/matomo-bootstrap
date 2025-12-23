@@ -1,4 +1,4 @@
-name: Reusable Test (ruff + e2e)
+name: reusable-test
 
 on:
   workflow_call:
@@ -29,10 +29,32 @@ on:
         default: "ci-token"
 
 jobs:
-  test:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: "pip"
+
+      - name: Install lint deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Ruff
+        run: |
+          ruff check .
+          ruff format --check .
+
+  e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,22 +70,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl
 
-      - name: Install Python deps
+      - name: Install Python deps (editable + e2e)
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[e2e]"
-          pip install ruff
-
-      - name: Ruff
-        run: |
-          ruff check .
-          ruff format --check .
 
       - name: Install Playwright Chromium
         run: |
-          python -m playwright install --with-deps chromium
+          python -m playwright install --with-deps --force chromium
 
-      - name: E2E (docker compose + installer + tests)
+      - name: Run E2E (docker compose)
         env:
           MATOMO_URL: ${{ inputs.matomo-url }}
           MATOMO_ADMIN_USER: ${{ inputs.matomo-admin-user }}
