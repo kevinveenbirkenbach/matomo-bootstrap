@@ -1,3 +1,8 @@
+## [1.1.2] - 2025-12-24
+
+* **Improved error visibility during Matomo installation**: When the setup fails (for example due to an invalid admin email or missing required fields), the installer now **prints the actual Matomo error messages to the logs**, instead of failing with a generic error.
+
+
 ## [1.1.1] - 2025-12-24
 
 * Improved Docker image publishing: automatic `vX.Y.Z`, `latest`, and `stable` tags for releases.
