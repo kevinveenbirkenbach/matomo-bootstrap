@@ -33,6 +33,95 @@ def _log(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
+def _page_warnings(page, *, prefix: str = "[install]") -> list[str]:
+    """
+    Detect Matomo installer warnings/errors on the current page.
+
+    - Does NOT change any click logic.
+    - Prints found warnings/errors to stderr (stdout stays clean).
+    - Returns a de-duplicated list of warning/error texts (empty if none found).
+    """
+    def _safe(s: str | None) -> str:
+        return (s or "").strip()
+
+    # Helpful context (doesn't spam much, but makes failures traceable)
+    try:
+        url = page.url
+    except Exception:
+        url = "<unknown-url>"
+    try:
+        title = page.title()
+    except Exception:
+        title = "<unknown-title>"
+
+    selectors = [
+        # your originals
+        ".warning",
+        ".alert.alert-danger",
+        ".alert.alert-warning",
+        ".notification",
+        ".message_container",
+        # common Matomo / UI patterns seen across versions
+        "#notificationContainer",
+        ".system-check-error",
+        ".system-check-warning",
+        ".form-errors",
+        ".error",
+        ".errorMessage",
+        ".invalid-feedback",
+        ".help-block.error",
+        ".ui-state-error",
+        ".alert-danger",
+        ".alert-warning",
+        "[role='alert']",
+    ]
+
+    texts: list[str] = []
+
+    for sel in selectors:
+        loc = page.locator(sel)
+        try:
+            n = loc.count()
+        except Exception:
+            n = 0
+        if n <= 0:
+            continue
+
+        # collect all matches (not only .first)
+        for i in range(min(n, 50)):  # avoid insane spam if page is weird
+            try:
+                t = _safe(loc.nth(i).inner_text())
+            except Exception:
+                t = ""
+            if t:
+                texts.append(t)
+
+    # Also catch HTML5 validation bubbles / inline field errors
+    # (Sometimes Matomo marks invalid inputs with aria-invalid + sibling text)
+    try:
+        invalid = page.locator("[aria-invalid='true']")
+        n_invalid = invalid.count()
+    except Exception:
+        n_invalid = 0
+
+    if n_invalid > 0:
+        texts.append(f"{n_invalid} field(s) marked aria-invalid=true.")
+
+    # De-duplicate while preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in texts:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+
+    if out:
+        print(f"{prefix} page warnings/errors detected @ {url} ({title}):", file=sys.stderr)
+        for idx, t in enumerate(out, 1):
+            print(f"{prefix}  {idx}) {t}", file=sys.stderr)
+
+    return out
+
 def wait_http(url: str, timeout: int = 180) -> None:
     """
     Consider Matomo 'reachable' as soon as the HTTP server answers - even with 500.
@@ -102,8 +191,7 @@ class WebInstaller(Installer):
         wait_http(base_url)
 
         if is_installed(base_url):
-            if config.debug:
-                _log("[install] Matomo already looks installed. Skipping installer.")
+            _log("[install] Matomo already looks installed. Skipping installer.")
             return
 
         from playwright.sync_api import sync_playwright
@@ -119,10 +207,6 @@ class WebInstaller(Installer):
             page = context.new_page()
             page.set_default_navigation_timeout(PLAYWRIGHT_NAV_TIMEOUT_MS)
             page.set_default_timeout(PLAYWRIGHT_NAV_TIMEOUT_MS)
-
-            def _dbg(msg: str) -> None:
-                if config.debug:
-                    _log(f"[install] {msg}")
 
             def click_next() -> None:
                 """
@@ -149,13 +233,11 @@ class WebInstaller(Installer):
                 for role, name in candidates:
                     loc = page.get_by_role(role, name=name)
                     if loc.count() > 0:
-                        _dbg(f"click_next(): {role} '{name}'")
                         loc.first.click()
                         return
 
                 loc = page.get_by_text("Next", exact=False)
                 if loc.count() > 0:
-                    _dbg("click_next(): fallback text 'Next'")
                     loc.first.click()
                     return
 
@@ -164,6 +246,7 @@ class WebInstaller(Installer):
                 )
 
             page.goto(base_url, wait_until="domcontentloaded")
+            _page_warnings(page)
 
             def superuser_form_visible() -> bool:
                 return page.locator("#login-0").count() > 0
@@ -174,6 +257,7 @@ class WebInstaller(Installer):
                 click_next()
                 page.wait_for_load_state("domcontentloaded")
                 page.wait_for_timeout(200)
+                _page_warnings(page)
             else:
                 raise RuntimeError(
                     "Installer did not reach superuser step (login-0 not found)."
@@ -191,11 +275,16 @@ class WebInstaller(Installer):
 
             page.locator("#email-0").click()
             page.locator("#email-0").fill(config.admin_email)
+            _page_warnings(page)
 
             if page.get_by_role("button", name="Next »").count() > 0:
                 page.get_by_role("button", name="Next »").click()
             else:
                 click_next()
+
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(200)
+            _page_warnings(page)
 
             if page.locator("#siteName-0").count() > 0:
                 page.locator("#siteName-0").click()
@@ -205,26 +294,38 @@ class WebInstaller(Installer):
                 page.locator("#url-0").click()
                 page.locator("#url-0").fill(DEFAULT_SITE_URL)
 
+            _page_warnings(page)
+
             try:
                 page.get_by_role("combobox").first.click()
                 page.get_by_role("listbox").get_by_text(DEFAULT_TIMEZONE).click()
             except Exception:
-                _dbg("Timezone selection skipped (not found / changed UI).")
+                _log("Timezone selection skipped (not found / changed UI).")
 
             try:
                 page.get_by_role("combobox").nth(2).click()
                 page.get_by_role("listbox").get_by_text(DEFAULT_ECOMMERCE).click()
             except Exception:
-                _dbg("Ecommerce selection skipped (not found / changed UI).")
+                _log("Ecommerce selection skipped (not found / changed UI).")
+
+            _page_warnings(page)
 
             click_next()
             page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(200)
+            _page_warnings(page)
 
             if page.get_by_role("link", name="Next »").count() > 0:
                 page.get_by_role("link", name="Next »").click()
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(200)
+                _page_warnings(page)
 
             if page.get_by_role("button", name="Continue to Matomo »").count() > 0:
                 page.get_by_role("button", name="Continue to Matomo »").click()
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(200)
+                _page_warnings(page)
 
             context.close()
             browser.close()

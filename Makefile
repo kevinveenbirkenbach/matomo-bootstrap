@@ -34,12 +34,13 @@ COMPOSE_STACK := docker compose -f $(COMPOSE_STACK_FILE)
 
 .PHONY: help \
         venv deps-e2e playwright-install e2e-up e2e-install e2e-test e2e-down e2e logs clean \
+        test-integration \
         image-build image-run image-shell image-push image-clean \
         stack-up stack-down stack-logs stack-ps stack-bootstrap stack-rebootstrap stack-clean stack-reset
 
 help:
 	@echo "Targets:"
-	@echo "  venv              Create local venv in $(VENV_DIR)"
+	@echo "  venv               Create local venv in $(VENV_DIR)"
 	@echo "  deps-e2e           Install package + E2E deps into venv"
 	@echo "  playwright-install Install Chromium for Playwright (inside venv)"
 	@echo "  e2e-up             Start Matomo + DB for E2E tests"
@@ -49,6 +50,7 @@ help:
 	@echo "  e2e                Full cycle: up → install → test → down"
 	@echo "  logs               Show Matomo logs (E2E compose)"
 	@echo "  clean              Stop E2E containers + remove venv"
+	@echo "  test-integration   Run integration tests (unittest)"
 	@echo ""
 	@echo "Container image targets:"
 	@echo "  image-build        Build matomo-bootstrap container image"
@@ -128,6 +130,13 @@ logs:
 
 clean: e2e-down
 	rm -rf $(VENV_DIR)
+
+# ----------------------------
+# Integration tests
+# ----------------------------
+
+test-integration:
+	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests/integration -v
 
 # ----------------------------
 # Container image workflow
