@@ -1,3 +1,8 @@
+## [1.1.1] - 2025-12-24
+
+* Improved Docker image publishing: automatic `vX.Y.Z`, `latest`, and `stable` tags for releases.
+
+
 ## [1.1.0] - 2025-12-23
 
 * Implemented bootstrap docker image to auto install matomo in docker compose
