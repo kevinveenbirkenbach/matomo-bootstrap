@@ -87,7 +87,9 @@ class TestWebInstallerWarningsIntegration(unittest.TestCase):
         Some Matomo versions repeat the same alert in multiple containers.
         We must return/log each unique text only once.
         """
-        repeated = "Please fix the following errors:\nThe email doesn't have a valid format."
+        repeated = (
+            "Please fix the following errors:\nThe email doesn't have a valid format."
+        )
         page = _FakePage(
             url="http://matomo/index.php?action=setupSuperUser&module=Installation",
             title="Superuser",

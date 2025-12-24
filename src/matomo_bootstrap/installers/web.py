@@ -41,6 +41,7 @@ def _page_warnings(page, *, prefix: str = "[install]") -> list[str]:
     - Prints found warnings/errors to stderr (stdout stays clean).
     - Returns a de-duplicated list of warning/error texts (empty if none found).
     """
+
     def _safe(s: str | None) -> str:
         return (s or "").strip()
 
@@ -116,11 +117,15 @@ def _page_warnings(page, *, prefix: str = "[install]") -> list[str]:
             out.append(t)
 
     if out:
-        print(f"{prefix} page warnings/errors detected @ {url} ({title}):", file=sys.stderr)
+        print(
+            f"{prefix} page warnings/errors detected @ {url} ({title}):",
+            file=sys.stderr,
+        )
         for idx, t in enumerate(out, 1):
             print(f"{prefix}  {idx}) {t}", file=sys.stderr)
 
     return out
+
 
 def wait_http(url: str, timeout: int = 180) -> None:
     """
