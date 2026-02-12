@@ -261,7 +261,7 @@ class WebInstaller(Installer):
                     break
                 click_next()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(200)
+                page.wait_for_timeout(1000)
                 _page_warnings(page)
             else:
                 raise RuntimeError(
@@ -288,7 +288,7 @@ class WebInstaller(Installer):
                 click_next()
 
             page.wait_for_load_state("domcontentloaded")
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(1000)
             _page_warnings(page)
 
             if page.locator("#siteName-0").count() > 0:
@@ -317,19 +317,19 @@ class WebInstaller(Installer):
 
             click_next()
             page.wait_for_load_state("domcontentloaded")
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(1000)
             _page_warnings(page)
 
             if page.get_by_role("link", name="Next »").count() > 0:
                 page.get_by_role("link", name="Next »").click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(200)
+                page.wait_for_timeout(1000)
                 _page_warnings(page)
 
             if page.get_by_role("button", name="Continue to Matomo »").count() > 0:
                 page.get_by_role("button", name="Continue to Matomo »").click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(200)
+                page.wait_for_timeout(1000)
                 _page_warnings(page)
 
             context.close()
