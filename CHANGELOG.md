@@ -1,3 +1,8 @@
+## [1.1.4] - 2026-02-13
+
+* This release hardens Matomo bootstrap by adding installer UI readiness waits/retries.
+
+
 ## [1.1.3] - 2026-02-12
 
 * Increase Playwright step wait from 200ms to 1000ms to improve CI stability during Matomo installation.
