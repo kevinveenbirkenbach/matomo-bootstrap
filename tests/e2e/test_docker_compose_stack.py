@@ -56,6 +56,29 @@ def _wait_for_http_any_status(url: str, timeout_s: int) -> None:
     raise RuntimeError(f"Matomo did not become reachable at {url} ({last_exc})")
 
 
+def _extract_service_block(compose_config: str, service_name: str) -> str:
+    lines = compose_config.splitlines()
+    marker = f"  {service_name}:"
+    start = -1
+    for idx, line in enumerate(lines):
+        if line == marker:
+            start = idx
+            break
+    if start < 0:
+        raise AssertionError(
+            f"service block not found in compose config: {service_name}"
+        )
+
+    end = len(lines)
+    for idx in range(start + 1, len(lines)):
+        line = lines[idx]
+        if line.startswith("  ") and not line.startswith("    "):
+            end = idx
+            break
+
+    return "\n".join(lines[start:end])
+
+
 class TestRootDockerComposeStack(unittest.TestCase):
     """
     E2E test for repository root docker-compose.yml:
@@ -129,6 +152,31 @@ class TestRootDockerComposeStack(unittest.TestCase):
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
 
         self.assertIsInstance(data, list)
+
+
+class TestRootDockerComposeDefinition(unittest.TestCase):
+    def test_bootstrap_service_waits_for_healthy_matomo_and_has_readiness_knobs(
+        self,
+    ) -> None:
+        cfg = _run(
+            _compose_cmd("config"),
+            check=True,
+            extra_env={"MATOMO_PORT": MATOMO_PORT},
+        )
+        self.assertEqual(cfg.returncode, 0, cfg.stderr)
+
+        bootstrap_block = _extract_service_block(cfg.stdout, "bootstrap")
+
+        self.assertIn("depends_on:", bootstrap_block)
+        self.assertIn("matomo:", bootstrap_block)
+        self.assertIn("condition: service_healthy", bootstrap_block)
+        self.assertIn("MATOMO_INSTALLER_READY_TIMEOUT_S:", bootstrap_block)
+        self.assertIn("MATOMO_INSTALLER_STEP_TIMEOUT_S:", bootstrap_block)
+        self.assertIn("MATOMO_INSTALLER_STEP_DEADLINE_S:", bootstrap_block)
+
+        matomo_block = _extract_service_block(cfg.stdout, "matomo")
+        self.assertIn("healthcheck:", matomo_block)
+        self.assertIn("curl -fsS http://127.0.0.1/ >/dev/null || exit 1", matomo_block)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ services:
     volumes:
       - matomo_data:/var/www/html
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/ >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 60
@@ -47,7 +47,7 @@ services:
     container_name: matomo-bootstrap
     depends_on:
       matomo:
-        condition: service_started
+        condition: service_healthy
     environment:
       MATOMO_URL: "http://matomo"
       MATOMO_ADMIN_USER: "administrator"
@@ -65,6 +65,10 @@ services:
       MATOMO_PLAYWRIGHT_HEADLESS: "1"
       MATOMO_PLAYWRIGHT_NAV_TIMEOUT_MS: "60000"
       MATOMO_PLAYWRIGHT_SLOWMO_MS: "0"
+      MATOMO_INSTALLER_READY_TIMEOUT_S: "180"
+      MATOMO_INSTALLER_STEP_TIMEOUT_S: "30"
+      MATOMO_INSTALLER_STEP_DEADLINE_S: "180"
+      MATOMO_INSTALLER_DEBUG_DIR: "/tmp/matomo-bootstrap"
     # bootstrap is a one-shot command that prints the token and exits
     # if you want to re-run, do: docker compose run --rm bootstrap
     restart: "no"

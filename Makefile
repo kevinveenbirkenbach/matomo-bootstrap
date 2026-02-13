@@ -78,8 +78,46 @@ help:
 # ----------------------------
 
 venv:
-	@test -x "$(VENV_PY)" || ($(PYTHON) -m venv $(VENV_DIR))
-	@$(VENV_PIP) -q install -U pip setuptools wheel >/dev/null
+	@set -e; \
+	if [ ! -d "$(VENV_DIR)" ]; then \
+		echo "Creating $(VENV_DIR) ..."; \
+		$(PYTHON) -m venv "$(VENV_DIR)"; \
+	fi; \
+	if ! [ -x "$(VENV_PY)" ] || ! "$(VENV_PY)" -V >/dev/null 2>&1; then \
+		echo "Repairing $(VENV_PY) symlink ..."; \
+		fix_target=""; \
+		for cand in "$(VENV_DIR)/bin/python3.14" "$(VENV_DIR)/bin/python3.13" "$(VENV_DIR)/bin/python3.12" "$(VENV_DIR)/bin/python3.11" "$(VENV_DIR)/bin/python3.10"; do \
+			if [ -x "$$cand" ]; then \
+				fix_target="$$(basename "$$cand")"; \
+				break; \
+			fi; \
+		done; \
+		if [ -z "$$fix_target" ] && [ -x "$(VENV_PIP)" ]; then \
+			shebang="$$(head -n1 "$(VENV_PIP)" | sed 's/^#!//')"; \
+			if [ -n "$$shebang" ] && [ -x "$$shebang" ]; then \
+				fix_target="$$(basename "$$shebang")"; \
+			fi; \
+		fi; \
+		if [ -n "$$fix_target" ] && [ -x "$(VENV_DIR)/bin/$$fix_target" ]; then \
+			ln -sfn "$$fix_target" "$(VENV_PY)"; \
+			ln -sfn "$$fix_target" "$(VENV_DIR)/bin/python3"; \
+		fi; \
+	fi; \
+	if ! [ -x "$(VENV_PIP)" ] || ! "$(VENV_PIP)" --version >/dev/null 2>&1; then \
+		echo "Repairing pip via ensurepip ..."; \
+		"$(VENV_PY)" -m ensurepip --upgrade >/dev/null 2>&1 || true; \
+	fi; \
+	if ! [ -x "$(VENV_PY)" ] || ! "$(VENV_PY)" -V >/dev/null 2>&1; then \
+		echo "ERROR: Could not repair $(VENV_PY) in existing $(VENV_DIR)."; \
+		echo "Run 'make clean' once or remove $(VENV_DIR) manually."; \
+		exit 2; \
+	fi; \
+	if ! [ -x "$(VENV_PIP)" ] || ! "$(VENV_PIP)" --version >/dev/null 2>&1; then \
+		echo "ERROR: Could not repair $(VENV_PIP) in existing $(VENV_DIR)."; \
+		echo "Run 'make clean' once or remove $(VENV_DIR) manually."; \
+		exit 2; \
+	fi; \
+	"$(VENV_PIP)" -q install -U pip setuptools wheel >/dev/null
 
 deps-e2e: venv
 	@$(VENV_PIP) install -e ".[e2e]"

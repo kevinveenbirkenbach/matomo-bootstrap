@@ -172,7 +172,7 @@ services:
     volumes:
       - matomo_data:/var/www/html
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/ >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 60
@@ -213,6 +213,10 @@ services:
       MATOMO_PLAYWRIGHT_HEADLESS: "1"
       MATOMO_PLAYWRIGHT_NAV_TIMEOUT_MS: "60000"
       MATOMO_PLAYWRIGHT_SLOWMO_MS: "0"
+      MATOMO_INSTALLER_READY_TIMEOUT_S: "180"
+      MATOMO_INSTALLER_STEP_TIMEOUT_S: "30"
+      MATOMO_INSTALLER_STEP_DEADLINE_S: "180"
+      MATOMO_INSTALLER_DEBUG_DIR: "/tmp/matomo-bootstrap"
 
     restart: "no"
 
@@ -269,6 +273,8 @@ matomo-bootstrap
 2. **Installation (if needed)**
 
    * uses a recorded Playwright flow to complete the Matomo web installer
+   * waits until installer controls are interactive before clicking next steps
+   * writes screenshot/HTML debug artifacts on installer failure
 3. **Authentication**
 
    * logs in using Matomo’s `Login.logme` controller (cookie session)
