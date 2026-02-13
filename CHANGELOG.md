@@ -1,3 +1,8 @@
+## [1.1.3] - 2026-02-12
+
+* Increase Playwright step wait from 200ms to 1000ms to improve CI stability during Matomo installation.
+
+
 ## [1.1.2] - 2025-12-24
 
 * **Improved error visibility during Matomo installation**: When the setup fails (for example due to an invalid admin email or missing required fields), the installer now **prints the actual Matomo error messages to the logs**, instead of failing with a generic error.
