@@ -65,7 +65,11 @@ nix run --no-write-lock-file -L .#matomo-bootstrap -- \\
             "compose",
             "-f",
             "tests/e2e/docker-compose.yml",
-            "exec",
+            # Use `run` instead of `exec` to avoid runtime-specific
+            # `/etc/group` lookup issues seen with nix image + compose exec.
+            "run",
+            "--rm",
+            "--no-deps",
             "-T",
             "nix",
             "sh",
