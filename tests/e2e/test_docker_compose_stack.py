@@ -7,13 +7,21 @@ import urllib.request
 
 
 COMPOSE_FILE = os.environ.get("MATOMO_STACK_COMPOSE_FILE", "docker-compose.yml")
+SLOW_COMPOSE_FILE = os.environ.get(
+    "MATOMO_STACK_SLOW_COMPOSE_FILE", "tests/e2e/docker-compose.slow.yml"
+)
 
 # Pick a non-default port to avoid collisions with other CI stacks that use 8080
 MATOMO_PORT = os.environ.get("MATOMO_PORT", "18080")
 MATOMO_HOST_URL = os.environ.get("MATOMO_STACK_URL", f"http://127.0.0.1:{MATOMO_PORT}")
+MATOMO_SLOW_PORT = os.environ.get("MATOMO_SLOW_PORT", "18081")
+MATOMO_SLOW_HOST_URL = os.environ.get(
+    "MATOMO_SLOW_STACK_URL", f"http://127.0.0.1:{MATOMO_SLOW_PORT}"
+)
 
 # How long we wait for Matomo HTTP to respond at all (seconds)
 WAIT_TIMEOUT_SECONDS = int(os.environ.get("MATOMO_STACK_WAIT_TIMEOUT", "180"))
+SLOW_WAIT_TIMEOUT_SECONDS = int(os.environ.get("MATOMO_SLOW_STACK_WAIT_TIMEOUT", "420"))
 
 
 def _run(
@@ -32,8 +40,13 @@ def _run(
     )
 
 
-def _compose_cmd(*args: str) -> list[str]:
-    return ["docker", "compose", "-f", COMPOSE_FILE, *args]
+def _compose_cmd(*args: str, compose_files: list[str] | None = None) -> list[str]:
+    files = compose_files or [COMPOSE_FILE]
+    cmd = ["docker", "compose"]
+    for compose_file in files:
+        cmd.extend(["-f", compose_file])
+    cmd.extend(args)
+    return cmd
 
 
 def _wait_for_http_any_status(url: str, timeout_s: int) -> None:
@@ -108,12 +121,19 @@ class TestRootDockerComposeStack(unittest.TestCase):
             extra_env={"MATOMO_PORT": MATOMO_PORT},
         )
 
-    def test_root_docker_compose_yml_stack_bootstraps_and_token_works(self) -> None:
-        # Build bootstrap image from Dockerfile (as defined in docker-compose.yml)
+    def _assert_stack_bootstraps_and_token_works(
+        self,
+        *,
+        compose_files: list[str],
+        matomo_port: str,
+        matomo_host_url: str,
+        wait_timeout_seconds: int,
+        bootstrap_retries: int = 2,
+    ) -> None:
         build = _run(
-            _compose_cmd("build", "bootstrap"),
+            _compose_cmd("build", "bootstrap", compose_files=compose_files),
             check=False,
-            extra_env={"MATOMO_PORT": MATOMO_PORT},
+            extra_env={"MATOMO_PORT": matomo_port},
         )
         self.assertEqual(
             build.returncode,
@@ -121,11 +141,10 @@ class TestRootDockerComposeStack(unittest.TestCase):
             f"compose build failed\nstdout:\n{build.stdout}\nstderr:\n{build.stderr}",
         )
 
-        # Start db + matomo (bootstrap is one-shot and started via "run")
         up = _run(
-            _compose_cmd("up", "-d", "db", "matomo"),
+            _compose_cmd("up", "-d", "db", "matomo", compose_files=compose_files),
             check=False,
-            extra_env={"MATOMO_PORT": MATOMO_PORT},
+            extra_env={"MATOMO_PORT": matomo_port},
         )
         self.assertEqual(
             up.returncode,
@@ -133,17 +152,14 @@ class TestRootDockerComposeStack(unittest.TestCase):
             f"compose up failed\nstdout:\n{up.stdout}\nstderr:\n{up.stderr}",
         )
 
-        # Wait until Matomo answers on the published port
-        _wait_for_http_any_status(MATOMO_HOST_URL + "/", WAIT_TIMEOUT_SECONDS)
+        _wait_for_http_any_status(matomo_host_url + "/", wait_timeout_seconds)
 
-        # Run bootstrap: it should print ONLY the token to stdout.
-        # Retry once because first-run installer startup can be flaky on slow CI.
         boot_attempts: list[subprocess.CompletedProcess] = []
-        for _ in range(2):
+        for _ in range(bootstrap_retries):
             boot = _run(
-                _compose_cmd("run", "--rm", "bootstrap"),
+                _compose_cmd("run", "--rm", "bootstrap", compose_files=compose_files),
                 check=False,
-                extra_env={"MATOMO_PORT": MATOMO_PORT},
+                extra_env={"MATOMO_PORT": matomo_port},
             )
             boot_attempts.append(boot)
             if boot.returncode == 0:
@@ -152,9 +168,26 @@ class TestRootDockerComposeStack(unittest.TestCase):
 
         if boot.returncode != 0:
             matomo_logs = _run(
-                _compose_cmd("logs", "--no-color", "--tail=200", "matomo"),
+                _compose_cmd(
+                    "logs",
+                    "--no-color",
+                    "--tail=250",
+                    "matomo",
+                    compose_files=compose_files,
+                ),
                 check=False,
-                extra_env={"MATOMO_PORT": MATOMO_PORT},
+                extra_env={"MATOMO_PORT": matomo_port},
+            )
+            db_logs = _run(
+                _compose_cmd(
+                    "logs",
+                    "--no-color",
+                    "--tail=200",
+                    "db",
+                    compose_files=compose_files,
+                ),
+                check=False,
+                extra_env={"MATOMO_PORT": matomo_port},
             )
             attempts_dump = "\n\n".join(
                 [
@@ -169,7 +202,8 @@ class TestRootDockerComposeStack(unittest.TestCase):
             self.fail(
                 "bootstrap container failed after retry.\n"
                 f"{attempts_dump}\n\n"
-                f"[matomo logs]\n{matomo_logs.stdout}\n{matomo_logs.stderr}"
+                f"[matomo logs]\n{matomo_logs.stdout}\n{matomo_logs.stderr}\n\n"
+                f"[db logs]\n{db_logs.stdout}\n{db_logs.stderr}"
             )
 
         token = (boot.stdout or "").strip()
@@ -179,9 +213,8 @@ class TestRootDockerComposeStack(unittest.TestCase):
             f"Expected token_auth on stdout, got stdout={boot.stdout!r} stderr={boot.stderr!r}",
         )
 
-        # Verify token works against Matomo API
         api_url = (
-            f"{MATOMO_HOST_URL}/index.php"
+            f"{matomo_host_url}/index.php"
             f"?module=API&method=SitesManager.getSitesWithAtLeastViewAccess"
             f"&format=json&token_auth={token}"
         )
@@ -189,6 +222,26 @@ class TestRootDockerComposeStack(unittest.TestCase):
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
 
         self.assertIsInstance(data, list)
+
+    def test_root_docker_compose_yml_stack_bootstraps_and_token_works(self) -> None:
+        self._assert_stack_bootstraps_and_token_works(
+            compose_files=[COMPOSE_FILE],
+            matomo_port=MATOMO_PORT,
+            matomo_host_url=MATOMO_HOST_URL,
+            wait_timeout_seconds=WAIT_TIMEOUT_SECONDS,
+            bootstrap_retries=2,
+        )
+
+    def test_root_docker_compose_yml_stack_bootstraps_under_resource_pressure(
+        self,
+    ) -> None:
+        self._assert_stack_bootstraps_and_token_works(
+            compose_files=[COMPOSE_FILE, SLOW_COMPOSE_FILE],
+            matomo_port=MATOMO_SLOW_PORT,
+            matomo_host_url=MATOMO_SLOW_HOST_URL,
+            wait_timeout_seconds=SLOW_WAIT_TIMEOUT_SECONDS,
+            bootstrap_retries=3,
+        )
 
 
 class TestRootDockerComposeDefinition(unittest.TestCase):
@@ -216,6 +269,28 @@ class TestRootDockerComposeDefinition(unittest.TestCase):
         matomo_block = _extract_service_block(cfg.stdout, "matomo")
         self.assertIn("healthcheck:", matomo_block)
         self.assertIn("curl -fsS http://127.0.0.1/ >/dev/null || exit 1", matomo_block)
+
+    def test_slow_override_sets_tight_resources_and_longer_timeouts(self) -> None:
+        cfg = _run(
+            _compose_cmd("config", compose_files=[COMPOSE_FILE, SLOW_COMPOSE_FILE]),
+            check=True,
+            extra_env={"MATOMO_PORT": MATOMO_SLOW_PORT},
+        )
+        self.assertEqual(cfg.returncode, 0, cfg.stderr)
+
+        matomo_block = _extract_service_block(cfg.stdout, "matomo")
+        self.assertIn("cpus: 0.35", matomo_block)
+        self.assertIn('mem_limit: "402653184"', matomo_block)
+        self.assertIn("start_period: 2m0s", matomo_block)
+
+        db_block = _extract_service_block(cfg.stdout, "db")
+        self.assertIn("cpus: 0.35", db_block)
+        self.assertIn('mem_limit: "335544320"', db_block)
+
+        bootstrap_block = _extract_service_block(cfg.stdout, "bootstrap")
+        self.assertIn("MATOMO_INSTALLER_STEP_TIMEOUT_S:", bootstrap_block)
+        self.assertIn("MATOMO_INSTALLER_STEP_DEADLINE_S:", bootstrap_block)
+        self.assertIn("MATOMO_INSTALLER_READY_TIMEOUT_S:", bootstrap_block)
 
 
 if __name__ == "__main__":

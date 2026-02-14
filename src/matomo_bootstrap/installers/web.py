@@ -388,6 +388,34 @@ def _has_continue_to_matomo_action(page, *, timeout_s: float = 0.2) -> bool:
     return loc is not None
 
 
+def _wait_for_superuser_login_field(
+    page, *, timeout_s: float, poll_interval_ms: int = 300
+) -> bool:
+    if timeout_s <= 0:
+        return _has_superuser_login_field(page, timeout_s=0.2)
+
+    deadline = time.time() + timeout_s
+    last_wait_log_at = 0.0
+
+    while time.time() < deadline:
+        _wait_dom_settled(page)
+        if _has_superuser_login_field(page, timeout_s=0.2):
+            return True
+
+        now = time.time()
+        if now - last_wait_log_at >= 5:
+            _log(
+                "[install] setupSuperUser reached but login form is not visible yet; "
+                f"waiting (url={page.url}, step={_get_step_hint(page.url)})"
+            )
+            _page_warnings(page)
+            last_wait_log_at = now
+
+        page.wait_for_timeout(poll_interval_ms)
+
+    return _has_superuser_login_field(page, timeout_s=0.2)
+
+
 def _fill_required_input(page, selectors, value: str, *, label: str) -> None:
     loc, _ = _first_present_css_locator(page, selectors, timeout_s=1.0)
     if loc is None:
@@ -736,12 +764,21 @@ class WebInstaller(Installer):
                 progress_deadline = time.time() + INSTALLER_STEP_DEADLINE_S
 
                 while not _has_superuser_login_field(page):
-                    if time.time() >= progress_deadline:
+                    now = time.time()
+                    if now >= progress_deadline:
                         raise RuntimeError(
                             "Installer did not reach superuser step "
                             f"within {INSTALLER_STEP_DEADLINE_S}s "
                             f"(url={page.url}, step={_get_step_hint(page.url)})."
                         )
+
+                    current_step = _get_step_hint(page.url)
+                    if "setupSuperUser" in current_step:
+                        remaining_s = max(0.0, progress_deadline - now)
+                        if _wait_for_superuser_login_field(page, timeout_s=remaining_s):
+                            break
+                        continue
+
                     if _resolve_tables_creation_conflict(
                         page, timeout_s=INSTALLER_TABLES_ERASE_TIMEOUT_S
                     ):

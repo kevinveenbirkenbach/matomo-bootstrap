@@ -1,0 +1,32 @@
+services:
+  db:
+    cpus: 0.35
+    mem_reservation: 192m
+    mem_limit: 320m
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 90
+
+  matomo:
+    cpus: 0.35
+    mem_reservation: 192m
+    mem_limit: 384m
+    healthcheck:
+      interval: 15s
+      timeout: 8s
+      retries: 120
+      start_period: 120s
+
+  bootstrap:
+    cpus: 0.75
+    mem_reservation: 512m
+    mem_limit: 1g
+    environment:
+      MATOMO_TIMEOUT: "120"
+      MATOMO_PLAYWRIGHT_NAV_TIMEOUT_MS: "120000"
+      MATOMO_INSTALLER_READY_TIMEOUT_S: "420"
+      MATOMO_INSTALLER_STEP_TIMEOUT_S: "120"
+      MATOMO_INSTALLER_STEP_DEADLINE_S: "420"
+      MATOMO_INSTALLER_TABLES_CREATION_TIMEOUT_S: "360"
+      MATOMO_INSTALLER_TABLES_ERASE_TIMEOUT_S: "240"
