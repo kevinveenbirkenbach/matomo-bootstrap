@@ -2,46 +2,75 @@ name: ci
 
 on:
   pull_request: {}
-  push: {}
+  push:
+    branches:
+      - "**"
 
 permissions:
   contents: write
   packages: write
 
 jobs:
-  detect-release:
-    runs-on: ubuntu-latest
-    outputs:
-      is_semver_tag: ${{ steps.detect.outputs.is_semver_tag }}
-    steps:
-      - id: detect
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Only true for tag refs like v1.2.3 (no suffix)
-          if [[ "${GITHUB_REF}" == refs/tags/* ]] && [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "is_semver_tag=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_semver_tag=false" >> "$GITHUB_OUTPUT"
-          fi
-
   tests:
     uses: ./.github/workflows/reusable-test.yml
     with:
       python-version: "3.12"
       matomo-token-description: "ci-token"
 
+  detect-release:
+    # Only consider releases on main branch pushes (not PRs, not other branches)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      is_semver_tag: ${{ steps.detect.outputs.is_semver_tag }}
+      version_tag: ${{ steps.detect.outputs.version_tag }}
+    steps:
+      - name: Checkout (full history for tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          # Tags that point to the current commit
+          TAGS="$(git tag --points-at "$GITHUB_SHA" || true)"
+
+          # Pick the first strict SemVer tag: vX.Y.Z
+          VERSION_TAG="$(echo "$TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
+
+          if [ -n "$VERSION_TAG" ]; then
+            echo "is_semver_tag=true" >> "$GITHUB_OUTPUT"
+            echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+            echo "Release tag detected on this commit: $VERSION_TAG"
+          else
+            echo "is_semver_tag=false" >> "$GITHUB_OUTPUT"
+            echo "version_tag=" >> "$GITHUB_OUTPUT"
+            echo "No SemVer tag on this commit."
+          fi
+
   publish-image:
+    # Only on main, and only if detect-release found a SemVer tag on this commit
     if: needs.detect-release.outputs.is_semver_tag == 'true'
-    needs: [detect-release, tests]
+    needs: [tests, detect-release]
     uses: ./.github/workflows/publish-image.yml
+    with:
+      version_tag: ${{ needs.detect-release.outputs.version_tag }}
+      sha: ${{ github.sha }}
     permissions:
       contents: read
       packages: write
 
   tag-stable:
+    # Only after tests + publish succeeded
     if: needs.detect-release.outputs.is_semver_tag == 'true'
-    needs: [detect-release, tests, publish-image]
+    needs: [tests, detect-release, publish-image]
     uses: ./.github/workflows/stable-tag.yml
+    with:
+      version_tag: ${{ needs.detect-release.outputs.version_tag }}
+      sha: ${{ github.sha }}
     permissions:
       contents: write

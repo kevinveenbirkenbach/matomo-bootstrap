@@ -1,7 +1,14 @@
 name: Stable Tag
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      version_tag:
+        type: string
+        required: true
+      sha:
+        type: string
+        required: true
 
 permissions:
   contents: write
@@ -16,16 +23,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Move stable tag to this version tag commit
+      - name: Move stable tag to the release commit
+        shell: bash
         run: |
           set -euo pipefail
 
-          echo "Triggered by tag: ${GITHUB_REF_NAME}"
-          echo "Commit: ${GITHUB_SHA}"
+          echo "Release tag: ${{ inputs.version_tag }}"
+          echo "Commit: ${{ inputs.sha }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git fetch --tags --force
-          git tag -fa stable -m "stable -> ${GITHUB_REF_NAME} (${GITHUB_SHA})" "${GITHUB_SHA}"
+          git tag -fa stable -m "stable -> ${{ inputs.version_tag }} (${{ inputs.sha }})" "${{ inputs.sha }}"
           git push --force origin stable

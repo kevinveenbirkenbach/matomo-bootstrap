@@ -1,7 +1,14 @@
 name: publish-image
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      version_tag:
+        type: string
+        required: true
+      sha:
+        type: string
+        required: true
 
 jobs:
   build-and-push:
@@ -11,11 +18,11 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout
+      - name: Checkout (exact commit)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.ref }}   # bei tag-push ist das der Tag-Ref
+          ref: ${{ inputs.sha }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -36,8 +43,8 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${{ github.repository }}"
-          RAW_TAG="${{ github.ref_name }}"   # e.g. v1.1.7
-          TAG="${RAW_TAG#v}"                 # -> 1.1.7
+          RAW_TAG="${{ inputs.version_tag }}"   # e.g. v1.1.8
+          TAG="${RAW_TAG#v}"                    # -> 1.1.8
           echo "tags=$IMAGE:$TAG,$IMAGE:latest" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
