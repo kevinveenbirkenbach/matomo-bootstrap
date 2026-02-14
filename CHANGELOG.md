@@ -1,3 +1,8 @@
+## [1.1.11] - 2026-02-14
+
+* This release improves matomo-bootstrap installer resilience by adding robust setupSuperUser field and button detection to prevent intermittent bootstrap failures.
+
+
 ## [1.1.10] - 2026-02-14
 
 * This release fixes a reproducible Playwright navigation race in the Matomo installer (setupSuperUser), hardens the Next/Continue flow, and adds integration tests for transient locator errors and progress detection without a visible Next button.

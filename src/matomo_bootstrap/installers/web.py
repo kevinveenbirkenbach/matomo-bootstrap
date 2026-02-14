@@ -358,7 +358,10 @@ def _first_continue_to_matomo_locator(page, *, timeout_s: float = 0.2):
 
     text_loc = page.get_by_text("Continue to Matomo", exact=False)
     try:
-        if _count_locator(text_loc, timeout_s=timeout_s) > 0 and text_loc.first.is_visible():
+        if (
+            _count_locator(text_loc, timeout_s=timeout_s) > 0
+            and text_loc.first.is_visible()
+        ):
             return text_loc.first, "text:Continue to Matomo*"
     except Exception:
         pass
@@ -912,7 +915,9 @@ class WebInstaller(Installer):
                     _fill_optional_input(
                         page, FIRST_WEBSITE_NAME_SELECTORS, DEFAULT_SITE_NAME
                     )
-                    _fill_optional_input(page, FIRST_WEBSITE_URL_SELECTORS, DEFAULT_SITE_URL)
+                    _fill_optional_input(
+                        page, FIRST_WEBSITE_URL_SELECTORS, DEFAULT_SITE_URL
+                    )
 
                     _page_warnings(page)
 
