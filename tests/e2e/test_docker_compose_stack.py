@@ -112,28 +112,63 @@ class TestRootDockerComposeStack(unittest.TestCase):
         # Build bootstrap image from Dockerfile (as defined in docker-compose.yml)
         build = _run(
             _compose_cmd("build", "bootstrap"),
-            check=True,
+            check=False,
             extra_env={"MATOMO_PORT": MATOMO_PORT},
         )
-        self.assertEqual(build.returncode, 0, build.stderr)
+        self.assertEqual(
+            build.returncode,
+            0,
+            f"compose build failed\nstdout:\n{build.stdout}\nstderr:\n{build.stderr}",
+        )
 
         # Start db + matomo (bootstrap is one-shot and started via "run")
         up = _run(
             _compose_cmd("up", "-d", "db", "matomo"),
-            check=True,
+            check=False,
             extra_env={"MATOMO_PORT": MATOMO_PORT},
         )
-        self.assertEqual(up.returncode, 0, up.stderr)
+        self.assertEqual(
+            up.returncode, 0, f"compose up failed\nstdout:\n{up.stdout}\nstderr:\n{up.stderr}"
+        )
 
         # Wait until Matomo answers on the published port
         _wait_for_http_any_status(MATOMO_HOST_URL + "/", WAIT_TIMEOUT_SECONDS)
 
-        # Run bootstrap: it should print ONLY the token to stdout
-        boot = _run(
-            _compose_cmd("run", "--rm", "bootstrap"),
-            check=True,
-            extra_env={"MATOMO_PORT": MATOMO_PORT},
-        )
+        # Run bootstrap: it should print ONLY the token to stdout.
+        # Retry once because first-run installer startup can be flaky on slow CI.
+        boot_attempts: list[subprocess.CompletedProcess] = []
+        for _ in range(2):
+            boot = _run(
+                _compose_cmd("run", "--rm", "bootstrap"),
+                check=False,
+                extra_env={"MATOMO_PORT": MATOMO_PORT},
+            )
+            boot_attempts.append(boot)
+            if boot.returncode == 0:
+                break
+            time.sleep(5)
+
+        if boot.returncode != 0:
+            matomo_logs = _run(
+                _compose_cmd("logs", "--no-color", "--tail=200", "matomo"),
+                check=False,
+                extra_env={"MATOMO_PORT": MATOMO_PORT},
+            )
+            attempts_dump = "\n\n".join(
+                [
+                    (
+                        f"[attempt {i}] rc={attempt.returncode}\n"
+                        f"stdout:\n{attempt.stdout}\n"
+                        f"stderr:\n{attempt.stderr}"
+                    )
+                    for i, attempt in enumerate(boot_attempts, 1)
+                ]
+            )
+            self.fail(
+                "bootstrap container failed after retry.\n"
+                f"{attempts_dump}\n\n"
+                f"[matomo logs]\n{matomo_logs.stdout}\n{matomo_logs.stderr}"
+            )
 
         token = (boot.stdout or "").strip()
         self.assertRegex(
