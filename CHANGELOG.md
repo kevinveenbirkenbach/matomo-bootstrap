@@ -1,3 +1,8 @@
+## [1.1.9] - 2026-02-14
+
+* Reworked CI to run on all branches while restricting Docker image publishing and stable tagging to tagged commits on main, using git-based SemVer detection.
+
+
 ## [1.1.8] - 2026-02-14
 
 * Refactored CI to use a single coordinator workflow with strict SemVer-based release gating and adjusted Docker image publishing to strip the leading v from version tags.
