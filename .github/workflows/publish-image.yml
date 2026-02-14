@@ -49,7 +49,8 @@ jobs:
           IMAGE="ghcr.io/${{ github.repository }}"
 
           if [ "${{ github.event_name }}" = "push" ]; then
-            TAG="${{ github.ref_name }}"     # e.g. v1.1.0
+            RAW_TAG="${{ github.ref_name }}"   # e.g. v1.1.7
+            TAG="${RAW_TAG#v}"                 # -> 1.1.7 (only strips leading 'v')
             echo "tags=$IMAGE:$TAG,$IMAGE:latest" >> "$GITHUB_OUTPUT"
           else
             echo "tags=$IMAGE:stable" >> "$GITHUB_OUTPUT"
