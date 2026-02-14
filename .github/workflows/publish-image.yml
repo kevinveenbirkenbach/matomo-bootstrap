@@ -1,20 +1,10 @@
 name: publish-image
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
-
-  workflow_run:
-    workflows: ["Stable Tag"]   # MUST match stable-tag.yml -> name: Stable Tag
-    types: [completed]
+  workflow_call: {}
 
 jobs:
   build-and-push:
-    if: |
-      (github.event_name == 'push') ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,9 +14,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # push: checks out the tag ref
-          # workflow_run: checks out the exact commit that the Stable Tag workflow ran on
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+          ref: ${{ github.ref }}   # bei tag-push ist das der Tag-Ref
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -47,14 +36,9 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${{ github.repository }}"
-
-          if [ "${{ github.event_name }}" = "push" ]; then
-            RAW_TAG="${{ github.ref_name }}"   # e.g. v1.1.7
-            TAG="${RAW_TAG#v}"                 # -> 1.1.7 (only strips leading 'v')
-            echo "tags=$IMAGE:$TAG,$IMAGE:latest" >> "$GITHUB_OUTPUT"
-          else
-            echo "tags=$IMAGE:stable" >> "$GITHUB_OUTPUT"
-          fi
+          RAW_TAG="${{ github.ref_name }}"   # e.g. v1.1.7
+          TAG="${RAW_TAG#v}"                 # -> 1.1.7
+          echo "tags=$IMAGE:$TAG,$IMAGE:latest" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
