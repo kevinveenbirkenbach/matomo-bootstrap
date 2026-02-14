@@ -1,3 +1,8 @@
+## [1.1.6] - 2026-02-14
+
+* Add installer table-step timeout env vars (MATOMO_INSTALLER_TABLES_CREATION_TIMEOUT_S, MATOMO_INSTALLER_TABLES_ERASE_TIMEOUT_S) to compose/docs and e2e checks.
+
+
 ## [1.1.5] - 2026-02-14
 
 * Harden web installer flow for nix e2e
