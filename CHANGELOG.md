@@ -1,3 +1,8 @@
+## [1.1.12] - 2026-02-14
+
+* This release fixes the intermittent Matomo installer failure in the setupSuperUser step by adding more robust waiting logic and introduces E2E tests for deployments under very tight resource constraints.
+
+
 ## [1.1.11] - 2026-02-14
 
 * This release improves matomo-bootstrap installer resilience by adding robust setupSuperUser field and button detection to prevent intermittent bootstrap failures.

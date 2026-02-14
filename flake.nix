@@ -20,7 +20,7 @@
       rec {
         matomo-bootstrap = python.pkgs.buildPythonApplication {
           pname = "matomo-bootstrap";
-          version = "1.1.11"; # keep in sync with pyproject.toml
+          version = "1.1.12"; # keep in sync with pyproject.toml
           pyproject = true;
           src = self;
 
