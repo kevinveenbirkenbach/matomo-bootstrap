@@ -1,3 +1,8 @@
+## [1.1.8] - 2026-02-14
+
+* Refactored CI to use a single coordinator workflow with strict SemVer-based release gating and adjusted Docker image publishing to strip the leading v from version tags.
+
+
 ## [1.1.7] - 2026-02-14
 
 * Harden compose installer timeouts and e2e stack diagnostics
