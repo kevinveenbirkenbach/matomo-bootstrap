@@ -1,3 +1,8 @@
+## [1.1.7] - 2026-02-14
+
+* Harden compose installer timeouts and e2e stack diagnostics
+
+
 ## [1.1.6] - 2026-02-14
 
 * Add installer table-step timeout env vars (MATOMO_INSTALLER_TABLES_CREATION_TIMEOUT_S, MATOMO_INSTALLER_TABLES_ERASE_TIMEOUT_S) to compose/docs and e2e checks.
