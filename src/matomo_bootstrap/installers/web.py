@@ -395,7 +395,9 @@ class WebInstaller(Installer):
 
             try:
                 page.goto(base_url, wait_until="domcontentloaded")
-                _wait_for_installer_interactive(page, timeout_s=INSTALLER_READY_TIMEOUT_S)
+                _wait_for_installer_interactive(
+                    page, timeout_s=INSTALLER_READY_TIMEOUT_S
+                )
                 _page_warnings(page)
 
                 progress_deadline = time.time() + INSTALLER_STEP_DEADLINE_S
