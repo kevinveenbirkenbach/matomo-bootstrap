@@ -67,6 +67,33 @@ def _log(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
+_TRANSIENT_NAVIGATION_ERROR_SNIPPETS = (
+    "Execution context was destroyed",
+    "most likely because of a navigation",
+    "Cannot find context with specified id",
+    "Frame was detached",
+)
+
+
+def _is_transient_navigation_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return any(snippet in msg for snippet in _TRANSIENT_NAVIGATION_ERROR_SNIPPETS)
+
+
+def _count_locator(
+    locator, *, timeout_s: float = 2.0, retry_interval_s: float = 0.1
+) -> int:
+    deadline = time.time() + timeout_s
+    while True:
+        try:
+            return locator.count()
+        except Exception as exc:
+            if _is_transient_navigation_error(exc) and time.time() < deadline:
+                time.sleep(retry_interval_s)
+                continue
+            raise
+
+
 def _page_warnings(page, *, prefix: str = "[install]") -> list[str]:
     """
     Detect Matomo installer warnings/errors on the current page.
@@ -244,14 +271,14 @@ def _first_next_locator(page):
     for role, name in NEXT_BUTTON_CANDIDATES:
         loc = page.get_by_role(role, name=name)
         try:
-            if loc.count() > 0 and loc.first.is_visible():
+            if _count_locator(loc) > 0 and loc.first.is_visible():
                 return loc.first, f"{role}:{name}"
         except Exception:
             continue
 
     text_loc = page.get_by_text("Next", exact=False)
     try:
-        if text_loc.count() > 0 and text_loc.first.is_visible():
+        if _count_locator(text_loc) > 0 and text_loc.first.is_visible():
             return text_loc.first, "text:Next*"
     except Exception:
         pass
@@ -261,9 +288,9 @@ def _first_next_locator(page):
 
 def _installer_interactive(page) -> bool:
     checks = [
-        page.locator("#login-0").count() > 0,
-        page.locator("#siteName-0").count() > 0,
-        page.get_by_role("button", name="Continue to Matomo »").count() > 0,
+        _count_locator(page.locator("#login-0")) > 0,
+        _count_locator(page.locator("#siteName-0")) > 0,
+        _count_locator(page.get_by_role("button", name="Continue to Matomo »")) > 0,
     ]
     loc, _ = _first_next_locator(page)
     return any(checks) or loc is not None
@@ -318,6 +345,32 @@ def _click_next_with_wait(page, *, timeout_s: int) -> str:
             )
             return current_step
 
+        # Some installer transitions render the next form asynchronously without
+        # exposing another "Next" control yet. Treat this as progress.
+        if _count_locator(page.locator("#login-0"), timeout_s=0.2) > 0:
+            _log(
+                "[install] Superuser form became available without explicit click; "
+                f"staying on step {current_step} (url {current_url})"
+            )
+            return current_step
+        if _count_locator(page.locator("#siteName-0"), timeout_s=0.2) > 0:
+            _log(
+                "[install] First website form became available without explicit click; "
+                f"staying on step {current_step} (url {current_url})"
+            )
+            return current_step
+        if (
+            _count_locator(
+                page.get_by_role("button", name="Continue to Matomo »"), timeout_s=0.2
+            )
+            > 0
+        ):
+            _log(
+                "[install] Continue-to-Matomo action is available without explicit click; "
+                f"staying on step {current_step} (url {current_url})"
+            )
+            return current_step
+
         now = time.time()
         if now - last_warning_log_at >= 5:
             _page_warnings(page)
@@ -334,7 +387,7 @@ def _click_next_with_wait(page, *, timeout_s: int) -> str:
 def _first_erase_tables_locator(page):
     css_loc = page.locator("#eraseAllTables")
     try:
-        if css_loc.count() > 0:
+        if _count_locator(css_loc) > 0:
             return css_loc.first, "css:#eraseAllTables"
     except Exception:
         pass
@@ -347,14 +400,14 @@ def _first_erase_tables_locator(page):
     ]:
         loc = page.get_by_role(role, name=name)
         try:
-            if loc.count() > 0:
+            if _count_locator(loc) > 0:
                 return loc.first, f"{role}:{name}"
         except Exception:
             continue
 
     text_loc = page.get_by_text("Delete the detected tables", exact=False)
     try:
-        if text_loc.count() > 0:
+        if _count_locator(text_loc) > 0:
             return text_loc.first, "text:Delete the detected tables*"
     except Exception:
         pass
@@ -559,7 +612,7 @@ class WebInstaller(Installer):
 
                 progress_deadline = time.time() + INSTALLER_STEP_DEADLINE_S
 
-                while page.locator("#login-0").count() == 0:
+                while _count_locator(page.locator("#login-0")) == 0:
                     if time.time() >= progress_deadline:
                         raise RuntimeError(
                             "Installer did not reach superuser step "
@@ -585,7 +638,7 @@ class WebInstaller(Installer):
                 page.locator("#password-0").click()
                 page.locator("#password-0").fill(config.admin_password)
 
-                if page.locator("#password_bis-0").count() > 0:
+                if _count_locator(page.locator("#password_bis-0")) > 0:
                     page.locator("#password_bis-0").click()
                     page.locator("#password_bis-0").fill(config.admin_password)
 
@@ -636,7 +689,7 @@ class WebInstaller(Installer):
                 if submitted_superuser:
                     _wait_dom_settled(page)
                     _log("[install] Submitted superuser form via form.requestSubmit().")
-                elif page.locator("#submit-0").count() > 0:
+                elif _count_locator(page.locator("#submit-0")) > 0:
                     page.locator("#submit-0").click(timeout=2_000)
                     _wait_dom_settled(page)
                     _log("[install] Submitted superuser form via #submit-0 fallback.")
@@ -646,10 +699,10 @@ class WebInstaller(Installer):
                 superuser_progress_deadline = time.time() + INSTALLER_STEP_TIMEOUT_S
                 while time.time() < superuser_progress_deadline:
                     _wait_dom_settled(page)
-                    if page.locator("#login-0").count() == 0:
+                    if _count_locator(page.locator("#login-0")) == 0:
                         break
                     page.wait_for_timeout(300)
-                if page.locator("#login-0").count() > 0:
+                if _count_locator(page.locator("#login-0")) > 0:
                     _page_warnings(page)
                     raise RuntimeError(
                         "Superuser form submit did not progress to first website setup "
@@ -720,11 +773,11 @@ class WebInstaller(Installer):
                         "[install] Submitted first website form via form.requestSubmit()."
                     )
                 else:
-                    if page.locator("#siteName-0").count() > 0:
+                    if _count_locator(page.locator("#siteName-0")) > 0:
                         page.locator("#siteName-0").click()
                         page.locator("#siteName-0").fill(DEFAULT_SITE_NAME)
 
-                    if page.locator("#url-0").count() > 0:
+                    if _count_locator(page.locator("#url-0")) > 0:
                         page.locator("#url-0").click()
                         page.locator("#url-0").fill(DEFAULT_SITE_URL)
 
@@ -732,7 +785,7 @@ class WebInstaller(Installer):
 
                     try:
                         comboboxes = page.get_by_role("combobox")
-                        if comboboxes.count() > 0:
+                        if _count_locator(comboboxes) > 0:
                             comboboxes.first.click(timeout=2_000)
                             page.get_by_role("listbox").get_by_text(
                                 DEFAULT_TIMEZONE
@@ -742,7 +795,7 @@ class WebInstaller(Installer):
 
                     try:
                         comboboxes = page.get_by_role("combobox")
-                        if comboboxes.count() > 2:
+                        if _count_locator(comboboxes) > 2:
                             comboboxes.nth(2).click(timeout=2_000)
                             page.get_by_role("listbox").get_by_text(
                                 DEFAULT_ECOMMERCE
@@ -757,10 +810,10 @@ class WebInstaller(Installer):
                 first_website_progress_deadline = time.time() + INSTALLER_STEP_TIMEOUT_S
                 while time.time() < first_website_progress_deadline:
                     _wait_dom_settled(page)
-                    if page.locator("#siteName-0").count() == 0:
+                    if _count_locator(page.locator("#siteName-0")) == 0:
                         break
                     page.wait_for_timeout(300)
-                if page.locator("#siteName-0").count() > 0:
+                if _count_locator(page.locator("#siteName-0")) > 0:
                     _page_warnings(page)
                     raise RuntimeError(
                         "First website form submit did not progress to tracking code "
@@ -770,12 +823,17 @@ class WebInstaller(Installer):
 
                 _page_warnings(page)
 
-                if page.get_by_role("link", name="Next »").count() > 0:
+                if _count_locator(page.get_by_role("link", name="Next »")) > 0:
                     page.get_by_role("link", name="Next »").click()
                     _wait_dom_settled(page)
                     _page_warnings(page)
 
-                if page.get_by_role("button", name="Continue to Matomo »").count() > 0:
+                if (
+                    _count_locator(
+                        page.get_by_role("button", name="Continue to Matomo »")
+                    )
+                    > 0
+                ):
                     page.get_by_role("button", name="Continue to Matomo »").click()
                     _wait_dom_settled(page)
                     _page_warnings(page)
