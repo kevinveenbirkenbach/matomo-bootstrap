@@ -61,6 +61,56 @@ NEXT_BUTTON_CANDIDATES: list[tuple[str, str]] = [
     ("button", "Fortfahren"),
 ]
 
+CONTINUE_TO_MATOMO_CANDIDATES: list[tuple[str, str]] = [
+    ("button", "Continue to Matomo »"),
+    ("button", "Continue to Matomo"),
+    ("link", "Continue to Matomo »"),
+    ("link", "Continue to Matomo"),
+]
+
+SUPERUSER_LOGIN_SELECTORS = (
+    "#login-0",
+    "#login",
+    "input[name='login']",
+    "form#generalsetupform input[name='login']",
+)
+SUPERUSER_PASSWORD_SELECTORS = (
+    "#password-0",
+    "#password",
+    "input[name='password']",
+    "form#generalsetupform input[name='password']",
+)
+SUPERUSER_PASSWORD_REPEAT_SELECTORS = (
+    "#password_bis-0",
+    "#password_bis",
+    "input[name='password_bis']",
+    "form#generalsetupform input[name='password_bis']",
+)
+SUPERUSER_EMAIL_SELECTORS = (
+    "#email-0",
+    "#email",
+    "input[name='email']",
+    "form#generalsetupform input[name='email']",
+)
+SUPERUSER_SUBMIT_SELECTORS = (
+    "#submit-0",
+    "#submit",
+    "form#generalsetupform button[type='submit']",
+    "form#generalsetupform input[type='submit']",
+)
+FIRST_WEBSITE_NAME_SELECTORS = (
+    "#siteName-0",
+    "#siteName",
+    "input[name='siteName']",
+    "form#websitesetupform input[name='siteName']",
+)
+FIRST_WEBSITE_URL_SELECTORS = (
+    "#url-0",
+    "#url",
+    "input[name='url']",
+    "form#websitesetupform input[name='url']",
+)
+
 
 def _log(msg: str) -> None:
     # IMPORTANT: logs must not pollute stdout (tests expect only token on stdout)
@@ -286,11 +336,86 @@ def _first_next_locator(page):
     return None, ""
 
 
+def _first_present_css_locator(page, selectors, *, timeout_s: float = 0.2):
+    for selector in selectors:
+        loc = page.locator(selector)
+        try:
+            if _count_locator(loc, timeout_s=timeout_s) > 0:
+                return loc.first, f"css:{selector}"
+        except Exception:
+            continue
+    return None, ""
+
+
+def _first_continue_to_matomo_locator(page, *, timeout_s: float = 0.2):
+    for role, name in CONTINUE_TO_MATOMO_CANDIDATES:
+        loc = page.get_by_role(role, name=name)
+        try:
+            if _count_locator(loc, timeout_s=timeout_s) > 0 and loc.first.is_visible():
+                return loc.first, f"{role}:{name}"
+        except Exception:
+            continue
+
+    text_loc = page.get_by_text("Continue to Matomo", exact=False)
+    try:
+        if _count_locator(text_loc, timeout_s=timeout_s) > 0 and text_loc.first.is_visible():
+            return text_loc.first, "text:Continue to Matomo*"
+    except Exception:
+        pass
+
+    return None, ""
+
+
+def _has_superuser_login_field(page, *, timeout_s: float = 0.2) -> bool:
+    loc, _ = _first_present_css_locator(
+        page, SUPERUSER_LOGIN_SELECTORS, timeout_s=timeout_s
+    )
+    return loc is not None
+
+
+def _has_first_website_name_field(page, *, timeout_s: float = 0.2) -> bool:
+    loc, _ = _first_present_css_locator(
+        page, FIRST_WEBSITE_NAME_SELECTORS, timeout_s=timeout_s
+    )
+    return loc is not None
+
+
+def _has_continue_to_matomo_action(page, *, timeout_s: float = 0.2) -> bool:
+    loc, _ = _first_continue_to_matomo_locator(page, timeout_s=timeout_s)
+    return loc is not None
+
+
+def _fill_required_input(page, selectors, value: str, *, label: str) -> None:
+    loc, _ = _first_present_css_locator(page, selectors, timeout_s=1.0)
+    if loc is None:
+        raise RuntimeError(
+            f"Could not locate required installer field '{label}' "
+            f"(url={page.url}, step={_get_step_hint(page.url)})."
+        )
+    try:
+        loc.click(timeout=2_000)
+    except Exception:
+        pass
+    loc.fill(value)
+
+
+def _fill_optional_input(page, selectors, value: str) -> bool:
+    loc, _ = _first_present_css_locator(page, selectors, timeout_s=0.5)
+    if loc is None:
+        return False
+    try:
+        loc.click(timeout=2_000)
+    except Exception:
+        pass
+    loc.fill(value)
+    return True
+
+
 def _installer_interactive(page) -> bool:
     checks = [
-        _count_locator(page.locator("#login-0")) > 0,
-        _count_locator(page.locator("#siteName-0")) > 0,
-        _count_locator(page.get_by_role("button", name="Continue to Matomo »")) > 0,
+        _has_superuser_login_field(page),
+        _has_first_website_name_field(page),
+        _has_continue_to_matomo_action(page),
     ]
     loc, _ = _first_next_locator(page)
     return any(checks) or loc is not None
@@ -347,24 +472,19 @@ def _click_next_with_wait(page, *, timeout_s: int) -> str:
 
         # Some installer transitions render the next form asynchronously without
         # exposing another "Next" control yet. Treat this as progress.
-        if _count_locator(page.locator("#login-0"), timeout_s=0.2) > 0:
+        if _has_superuser_login_field(page, timeout_s=0.2):
             _log(
                 "[install] Superuser form became available without explicit click; "
                 f"staying on step {current_step} (url {current_url})"
             )
             return current_step
-        if _count_locator(page.locator("#siteName-0"), timeout_s=0.2) > 0:
+        if _has_first_website_name_field(page, timeout_s=0.2):
             _log(
                 "[install] First website form became available without explicit click; "
                 f"staying on step {current_step} (url {current_url})"
             )
             return current_step
-        if (
-            _count_locator(
-                page.get_by_role("button", name="Continue to Matomo »"), timeout_s=0.2
-            )
-            > 0
-        ):
+        if _has_continue_to_matomo_action(page, timeout_s=0.2):
             _log(
                 "[install] Continue-to-Matomo action is available without explicit click; "
                 f"staying on step {current_step} (url {current_url})"
@@ -612,7 +732,7 @@ class WebInstaller(Installer):
 
                 progress_deadline = time.time() + INSTALLER_STEP_DEADLINE_S
 
-                while _count_locator(page.locator("#login-0")) == 0:
+                while not _has_superuser_login_field(page):
                     if time.time() >= progress_deadline:
                         raise RuntimeError(
                             "Installer did not reach superuser step "
@@ -632,18 +752,27 @@ class WebInstaller(Installer):
                     _click_next_with_wait(page, timeout_s=step_timeout)
                     _page_warnings(page)
 
-                page.locator("#login-0").click()
-                page.locator("#login-0").fill(config.admin_user)
-
-                page.locator("#password-0").click()
-                page.locator("#password-0").fill(config.admin_password)
-
-                if _count_locator(page.locator("#password_bis-0")) > 0:
-                    page.locator("#password_bis-0").click()
-                    page.locator("#password_bis-0").fill(config.admin_password)
-
-                page.locator("#email-0").click()
-                page.locator("#email-0").fill(config.admin_email)
+                _fill_required_input(
+                    page,
+                    SUPERUSER_LOGIN_SELECTORS,
+                    config.admin_user,
+                    label="superuser login",
+                )
+                _fill_required_input(
+                    page,
+                    SUPERUSER_PASSWORD_SELECTORS,
+                    config.admin_password,
+                    label="superuser password",
+                )
+                _fill_optional_input(
+                    page, SUPERUSER_PASSWORD_REPEAT_SELECTORS, config.admin_password
+                )
+                _fill_required_input(
+                    page,
+                    SUPERUSER_EMAIL_SELECTORS,
+                    config.admin_email,
+                    label="superuser email",
+                )
                 _page_warnings(page)
 
                 submitted_superuser = False
@@ -689,20 +818,27 @@ class WebInstaller(Installer):
                 if submitted_superuser:
                     _wait_dom_settled(page)
                     _log("[install] Submitted superuser form via form.requestSubmit().")
-                elif _count_locator(page.locator("#submit-0")) > 0:
-                    page.locator("#submit-0").click(timeout=2_000)
-                    _wait_dom_settled(page)
-                    _log("[install] Submitted superuser form via #submit-0 fallback.")
                 else:
-                    _click_next_with_wait(page, timeout_s=INSTALLER_STEP_TIMEOUT_S)
+                    submit_loc, submit_label = _first_present_css_locator(
+                        page, SUPERUSER_SUBMIT_SELECTORS, timeout_s=0.5
+                    )
+                    if submit_loc is not None:
+                        submit_loc.click(timeout=2_000)
+                        _wait_dom_settled(page)
+                        _log(
+                            "[install] Submitted superuser form via "
+                            f"{submit_label} fallback."
+                        )
+                    else:
+                        _click_next_with_wait(page, timeout_s=INSTALLER_STEP_TIMEOUT_S)
 
                 superuser_progress_deadline = time.time() + INSTALLER_STEP_TIMEOUT_S
                 while time.time() < superuser_progress_deadline:
                     _wait_dom_settled(page)
-                    if _count_locator(page.locator("#login-0")) == 0:
+                    if not _has_superuser_login_field(page):
                         break
                     page.wait_for_timeout(300)
-                if _count_locator(page.locator("#login-0")) > 0:
+                if _has_superuser_login_field(page):
                     _page_warnings(page)
                     raise RuntimeError(
                         "Superuser form submit did not progress to first website setup "
@@ -773,13 +909,10 @@ class WebInstaller(Installer):
                         "[install] Submitted first website form via form.requestSubmit()."
                     )
                 else:
-                    if _count_locator(page.locator("#siteName-0")) > 0:
-                        page.locator("#siteName-0").click()
-                        page.locator("#siteName-0").fill(DEFAULT_SITE_NAME)
-
-                    if _count_locator(page.locator("#url-0")) > 0:
-                        page.locator("#url-0").click()
-                        page.locator("#url-0").fill(DEFAULT_SITE_URL)
+                    _fill_optional_input(
+                        page, FIRST_WEBSITE_NAME_SELECTORS, DEFAULT_SITE_NAME
+                    )
+                    _fill_optional_input(page, FIRST_WEBSITE_URL_SELECTORS, DEFAULT_SITE_URL)
 
                     _page_warnings(page)
 
@@ -810,10 +943,10 @@ class WebInstaller(Installer):
                 first_website_progress_deadline = time.time() + INSTALLER_STEP_TIMEOUT_S
                 while time.time() < first_website_progress_deadline:
                     _wait_dom_settled(page)
-                    if _count_locator(page.locator("#siteName-0")) == 0:
+                    if not _has_first_website_name_field(page):
                         break
                     page.wait_for_timeout(300)
-                if _count_locator(page.locator("#siteName-0")) > 0:
+                if _has_first_website_name_field(page):
                     _page_warnings(page)
                     raise RuntimeError(
                         "First website form submit did not progress to tracking code "
@@ -828,13 +961,9 @@ class WebInstaller(Installer):
                     _wait_dom_settled(page)
                     _page_warnings(page)
 
-                if (
-                    _count_locator(
-                        page.get_by_role("button", name="Continue to Matomo »")
-                    )
-                    > 0
-                ):
-                    page.get_by_role("button", name="Continue to Matomo »").click()
+                continue_loc, _ = _first_continue_to_matomo_locator(page)
+                if continue_loc is not None:
+                    continue_loc.click()
                     _wait_dom_settled(page)
                     _page_warnings(page)
 
