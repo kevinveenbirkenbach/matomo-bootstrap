@@ -1,3 +1,8 @@
+## [1.1.5] - 2026-02-14
+
+* Harden web installer flow for nix e2e
+
+
 ## [1.1.4] - 2026-02-13
 
 * This release hardens Matomo bootstrap by adding installer UI readiness waits/retries.
