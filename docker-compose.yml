@@ -68,6 +68,8 @@ services:
       MATOMO_INSTALLER_READY_TIMEOUT_S: "180"
       MATOMO_INSTALLER_STEP_TIMEOUT_S: "30"
       MATOMO_INSTALLER_STEP_DEADLINE_S: "180"
+      MATOMO_INSTALLER_TABLES_CREATION_TIMEOUT_S: "180"
+      MATOMO_INSTALLER_TABLES_ERASE_TIMEOUT_S: "120"
       MATOMO_INSTALLER_DEBUG_DIR: "/tmp/matomo-bootstrap"
     # bootstrap is a one-shot command that prints the token and exits
     # if you want to re-run, do: docker compose run --rm bootstrap

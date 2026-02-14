@@ -173,6 +173,8 @@ class TestRootDockerComposeDefinition(unittest.TestCase):
         self.assertIn("MATOMO_INSTALLER_READY_TIMEOUT_S:", bootstrap_block)
         self.assertIn("MATOMO_INSTALLER_STEP_TIMEOUT_S:", bootstrap_block)
         self.assertIn("MATOMO_INSTALLER_STEP_DEADLINE_S:", bootstrap_block)
+        self.assertIn("MATOMO_INSTALLER_TABLES_CREATION_TIMEOUT_S:", bootstrap_block)
+        self.assertIn("MATOMO_INSTALLER_TABLES_ERASE_TIMEOUT_S:", bootstrap_block)
 
         matomo_block = _extract_service_block(cfg.stdout, "matomo")
         self.assertIn("healthcheck:", matomo_block)
