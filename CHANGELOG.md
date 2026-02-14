@@ -1,3 +1,8 @@
+## [1.1.10] - 2026-02-14
+
+* This release fixes a reproducible Playwright navigation race in the Matomo installer (setupSuperUser), hardens the Next/Continue flow, and adds integration tests for transient locator errors and progress detection without a visible Next button.
+
+
 ## [1.1.9] - 2026-02-14
 
 * Reworked CI to run on all branches while restricting Docker image publishing and stable tagging to tagged commits on main, using git-based SemVer detection.
