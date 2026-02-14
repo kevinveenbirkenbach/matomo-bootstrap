@@ -128,7 +128,9 @@ class TestRootDockerComposeStack(unittest.TestCase):
             extra_env={"MATOMO_PORT": MATOMO_PORT},
         )
         self.assertEqual(
-            up.returncode, 0, f"compose up failed\nstdout:\n{up.stdout}\nstderr:\n{up.stderr}"
+            up.returncode,
+            0,
+            f"compose up failed\nstdout:\n{up.stdout}\nstderr:\n{up.stderr}",
         )
 
         # Wait until Matomo answers on the published port
