@@ -28,6 +28,8 @@ class _StaticLocator:
     def count(self) -> int:
         if self._selector == "#login-0":
             return 1 if self._page.login_visible else 0
+        if self._selector == "form#generalsetupform":
+            return 1 if getattr(self._page, "form_visible", False) else 0
         if self._selector == "#siteName-0":
             return 0
         return 0
@@ -79,6 +81,7 @@ class _NoNextButLoginAppearsPage:
     def __init__(self):
         self.url = "http://matomo/index.php?action=setupSuperUser&module=Installation"
         self.login_visible = False
+        self.form_visible = False
         self._wait_calls = 0
 
     def locator(self, selector: str):
@@ -129,10 +132,39 @@ class _NoNextButNamedLoginAppearsPage:
             self.login_visible = True
 
 
+class _NoNextButSuperuserFormContainerAppearsPage:
+    def __init__(self):
+        self.url = "http://matomo/index.php?action=setupSuperUser&module=Installation"
+        self.login_visible = False
+        self.form_visible = False
+        self._wait_calls = 0
+
+    def locator(self, selector: str):
+        return _StaticLocator(self, selector)
+
+    def get_by_role(self, role: str, name: str):
+        return _RoleLocator(0)
+
+    def get_by_text(self, *_args, **_kwargs):
+        return _RoleLocator(0)
+
+    def title(self) -> str:
+        return "setupSuperUser"
+
+    def wait_for_load_state(self, *_args, **_kwargs):
+        return None
+
+    def wait_for_timeout(self, *_args, **_kwargs):
+        self._wait_calls += 1
+        if self._wait_calls >= 1:
+            self.form_visible = True
+
+
 class _DelayedSuperuserLoginPage:
     def __init__(self, *, reveal_after_wait_calls: int | None):
         self.url = "http://matomo/index.php?action=setupSuperUser&module=Installation"
         self.login_visible = False
+        self.form_visible = False
         self._wait_calls = 0
         self._reveal_after_wait_calls = reveal_after_wait_calls
 
@@ -158,6 +190,38 @@ class _DelayedSuperuserLoginPage:
             and self._wait_calls >= self._reveal_after_wait_calls
         ):
             self.login_visible = True
+
+
+class _DelayedSuperuserFormContainerPage:
+    def __init__(self, *, reveal_after_wait_calls: int | None):
+        self.url = "http://matomo/index.php?action=setupSuperUser&module=Installation"
+        self.login_visible = False
+        self.form_visible = False
+        self._wait_calls = 0
+        self._reveal_after_wait_calls = reveal_after_wait_calls
+
+    def locator(self, selector: str):
+        return _StaticLocator(self, selector)
+
+    def get_by_role(self, role: str, name: str):
+        return _RoleLocator(0)
+
+    def get_by_text(self, *_args, **_kwargs):
+        return _RoleLocator(0)
+
+    def title(self) -> str:
+        return "setupSuperUser"
+
+    def wait_for_load_state(self, *_args, **_kwargs):
+        return None
+
+    def wait_for_timeout(self, *_args, **_kwargs):
+        self._wait_calls += 1
+        if (
+            self._reveal_after_wait_calls is not None
+            and self._wait_calls >= self._reveal_after_wait_calls
+        ):
+            self.form_visible = True
 
 
 class TestWebInstallerLocatorCountIntegration(unittest.TestCase):
@@ -203,6 +267,14 @@ class TestWebInstallerLocatorCountIntegration(unittest.TestCase):
         self.assertEqual(step, "Installation:setupSuperUser")
         self.assertTrue(page.login_visible)
 
+    def test_click_next_wait_treats_superuser_form_container_as_progress(self) -> None:
+        page = _NoNextButSuperuserFormContainerAppearsPage()
+
+        step = _click_next_with_wait(page, timeout_s=1)
+
+        self.assertEqual(step, "Installation:setupSuperUser")
+        self.assertTrue(page.form_visible)
+
     def test_wait_for_superuser_login_field_allows_delayed_form(self) -> None:
         page = _DelayedSuperuserLoginPage(reveal_after_wait_calls=4)
 
@@ -214,6 +286,18 @@ class TestWebInstallerLocatorCountIntegration(unittest.TestCase):
 
         self.assertTrue(visible)
         self.assertTrue(page.login_visible)
+
+    def test_wait_for_superuser_login_field_allows_delayed_form_container(self) -> None:
+        page = _DelayedSuperuserFormContainerPage(reveal_after_wait_calls=4)
+
+        visible = _wait_for_superuser_login_field(
+            page,
+            timeout_s=1.0,
+            poll_interval_ms=1,
+        )
+
+        self.assertTrue(visible)
+        self.assertTrue(page.form_visible)
 
     def test_wait_for_superuser_login_field_times_out_when_absent(self) -> None:
         page = _DelayedSuperuserLoginPage(reveal_after_wait_calls=None)

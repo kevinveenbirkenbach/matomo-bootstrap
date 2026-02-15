@@ -34,6 +34,9 @@ INSTALLER_TABLES_CREATION_TIMEOUT_S = int(
 INSTALLER_TABLES_ERASE_TIMEOUT_S = int(
     os.environ.get("MATOMO_INSTALLER_TABLES_ERASE_TIMEOUT_S", "120")
 )
+INSTALLER_SUPERUSER_RELOAD_INTERVAL_S = int(
+    os.environ.get("MATOMO_INSTALLER_SUPERUSER_RELOAD_INTERVAL_S", "30")
+)
 INSTALLER_DEBUG_DIR = os.environ.get(
     "MATOMO_INSTALLER_DEBUG_DIR", "/tmp/matomo-bootstrap"
 ).rstrip("/")
@@ -73,6 +76,11 @@ SUPERUSER_LOGIN_SELECTORS = (
     "#login",
     "input[name='login']",
     "form#generalsetupform input[name='login']",
+)
+SUPERUSER_FORM_SELECTORS = (
+    "form#generalsetupform",
+    "form[action*='setupSuperUser']",
+    "form[action*='action=setupSuperUser']",
 )
 SUPERUSER_PASSWORD_SELECTORS = (
     "#password-0",
@@ -376,6 +384,19 @@ def _has_superuser_login_field(page, *, timeout_s: float = 0.2) -> bool:
     return loc is not None
 
 
+def _has_superuser_form_container(page, *, timeout_s: float = 0.2) -> bool:
+    loc, _ = _first_present_css_locator(
+        page, SUPERUSER_FORM_SELECTORS, timeout_s=timeout_s
+    )
+    return loc is not None
+
+
+def _superuser_form_ready(page, *, timeout_s: float = 0.2) -> bool:
+    return _has_superuser_login_field(
+        page, timeout_s=timeout_s
+    ) or _has_superuser_form_container(page, timeout_s=timeout_s)
+
+
 def _has_first_website_name_field(page, *, timeout_s: float = 0.2) -> bool:
     loc, _ = _first_present_css_locator(
         page, FIRST_WEBSITE_NAME_SELECTORS, timeout_s=timeout_s
@@ -392,20 +413,38 @@ def _wait_for_superuser_login_field(
     page, *, timeout_s: float, poll_interval_ms: int = 300
 ) -> bool:
     if timeout_s <= 0:
-        return _has_superuser_login_field(page, timeout_s=0.2)
+        return _superuser_form_ready(page, timeout_s=0.2)
 
     deadline = time.time() + timeout_s
     last_wait_log_at = 0.0
+    last_reload_at = time.time()
 
     while time.time() < deadline:
         _wait_dom_settled(page)
-        if _has_superuser_login_field(page, timeout_s=0.2):
+        if _superuser_form_ready(page, timeout_s=0.2):
             return True
 
         now = time.time()
+        if (
+            INSTALLER_SUPERUSER_RELOAD_INTERVAL_S > 0
+            and now - last_reload_at >= INSTALLER_SUPERUSER_RELOAD_INTERVAL_S
+        ):
+            try:
+                page.reload(wait_until="domcontentloaded")
+                _wait_dom_settled(page)
+                _log(
+                    "[install] Reloaded setupSuperUser page while waiting "
+                    "for superuser form."
+                )
+            except Exception as exc:
+                _log(f"[install] setupSuperUser reload attempt failed: {exc}")
+            last_reload_at = now
+            if _superuser_form_ready(page, timeout_s=0.2):
+                return True
+
         if now - last_wait_log_at >= 5:
             _log(
-                "[install] setupSuperUser reached but login form is not visible yet; "
+                "[install] setupSuperUser reached but superuser form is not visible yet; "
                 f"waiting (url={page.url}, step={_get_step_hint(page.url)})"
             )
             _page_warnings(page)
@@ -413,7 +452,7 @@ def _wait_for_superuser_login_field(
 
         page.wait_for_timeout(poll_interval_ms)
 
-    return _has_superuser_login_field(page, timeout_s=0.2)
+    return _superuser_form_ready(page, timeout_s=0.2)
 
 
 def _fill_required_input(page, selectors, value: str, *, label: str) -> None:
@@ -445,11 +484,101 @@ def _fill_optional_input(page, selectors, value: str) -> bool:
 def _installer_interactive(page) -> bool:
     checks = [
         _has_superuser_login_field(page),
+        _has_superuser_form_container(page),
         _has_first_website_name_field(page),
         _has_continue_to_matomo_action(page),
     ]
     loc, _ = _first_next_locator(page)
     return any(checks) or loc is not None
+
+
+def _submit_superuser_form_via_dom(
+    page, *, user: str, password: str, email: str
+) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                ([user, password, email]) => {
+                    const form =
+                        document.querySelector("form#generalsetupform")
+                        || document.querySelector("form[action*='setupSuperUser']")
+                        || document.querySelector("form[action*='action=setupSuperUser']");
+                    if (!form) return false;
+
+                    const pick = (selectors) => {
+                        for (const selector of selectors) {
+                            const candidate = form.querySelector(selector);
+                            if (candidate) return candidate;
+                        }
+                        return null;
+                    };
+
+                    const loginInput = pick([
+                        "input[name='login']",
+                        "input#login",
+                        "input[id^='login-']",
+                        "input[name*='login']",
+                        "input[name*='user']",
+                        "input[type='text']",
+                    ]);
+                    const passwordInput = pick([
+                        "input[name='password']",
+                        "input#password",
+                        "input[id^='password-']",
+                        "input[type='password']:not([name='password_bis'])",
+                        "input[type='password']",
+                    ]);
+                    const repeatPasswordInput = pick([
+                        "input[name='password_bis']",
+                        "input#password_bis",
+                        "input[id^='password_bis-']",
+                        "input[name*='repeat']",
+                    ]);
+                    const emailInput = pick([
+                        "input[name='email']",
+                        "input#email",
+                        "input[id^='email-']",
+                        "input[type='email']",
+                        "input[name*='mail']",
+                    ]);
+
+                    if (!loginInput || !passwordInput || !emailInput) return false;
+
+                    const setValue = (element, value) => {
+                        element.value = value;
+                        element.dispatchEvent(new Event("input", { bubbles: true }));
+                        element.dispatchEvent(new Event("change", { bubbles: true }));
+                    };
+
+                    setValue(loginInput, user);
+                    setValue(passwordInput, password);
+                    if (repeatPasswordInput) {
+                        setValue(repeatPasswordInput, password);
+                    }
+                    setValue(emailInput, email);
+
+                    const submit = form.querySelector(
+                        "button[type='submit'],input[type='submit']"
+                    );
+                    if (submit) {
+                        submit.click();
+                        return true;
+                    }
+
+                    if (typeof form.requestSubmit === "function") {
+                        form.requestSubmit();
+                    } else {
+                        form.submit();
+                    }
+                    return true;
+                }
+                """,
+                [user, password, email],
+            )
+        )
+    except Exception:
+        return False
 
 
 def _wait_for_installer_interactive(page, *, timeout_s: int) -> None:
@@ -506,6 +635,12 @@ def _click_next_with_wait(page, *, timeout_s: int) -> str:
         if _has_superuser_login_field(page, timeout_s=0.2):
             _log(
                 "[install] Superuser form became available without explicit click; "
+                f"staying on step {current_step} (url {current_url})"
+            )
+            return current_step
+        if _has_superuser_form_container(page, timeout_s=0.2):
+            _log(
+                "[install] Superuser form container became available without explicit click; "
                 f"staying on step {current_step} (url {current_url})"
             )
             return current_step
@@ -763,11 +898,11 @@ class WebInstaller(Installer):
 
                 progress_deadline = time.time() + INSTALLER_STEP_DEADLINE_S
 
-                while not _has_superuser_login_field(page):
+                while not _superuser_form_ready(page):
                     now = time.time()
                     if now >= progress_deadline:
                         raise RuntimeError(
-                            "Installer did not reach superuser step "
+                            "Installer did not reach superuser form "
                             f"within {INSTALLER_STEP_DEADLINE_S}s "
                             f"(url={page.url}, step={_get_step_hint(page.url)})."
                         )
@@ -792,73 +927,40 @@ class WebInstaller(Installer):
                     _click_next_with_wait(page, timeout_s=step_timeout)
                     _page_warnings(page)
 
-                _fill_required_input(
+                submitted_superuser = _submit_superuser_form_via_dom(
                     page,
-                    SUPERUSER_LOGIN_SELECTORS,
-                    config.admin_user,
-                    label="superuser login",
+                    user=config.admin_user,
+                    password=config.admin_password,
+                    email=config.admin_email,
                 )
-                _fill_required_input(
-                    page,
-                    SUPERUSER_PASSWORD_SELECTORS,
-                    config.admin_password,
-                    label="superuser password",
-                )
-                _fill_optional_input(
-                    page, SUPERUSER_PASSWORD_REPEAT_SELECTORS, config.admin_password
-                )
-                _fill_required_input(
-                    page,
-                    SUPERUSER_EMAIL_SELECTORS,
-                    config.admin_email,
-                    label="superuser email",
-                )
-                _page_warnings(page)
-
-                submitted_superuser = False
-                try:
-                    submitted_superuser = bool(
-                        page.evaluate(
-                            """
-                            ([user, password, email]) => {
-                                const form = document.querySelector("form#generalsetupform");
-                                if (!form) return false;
-
-                                const loginInput = form.querySelector("input[name='login']");
-                                const passwordInput = form.querySelector("input[name='password']");
-                                const repeatPasswordInput = form.querySelector("input[name='password_bis']");
-                                const emailInput = form.querySelector("input[name='email']");
-                                if (!loginInput || !passwordInput || !emailInput) return false;
-
-                                loginInput.value = user;
-                                passwordInput.value = password;
-                                if (repeatPasswordInput) {
-                                    repeatPasswordInput.value = password;
-                                }
-                                emailInput.value = email;
-
-                                if (typeof form.requestSubmit === "function") {
-                                    form.requestSubmit();
-                                } else {
-                                    form.submit();
-                                }
-                                return true;
-                            }
-                            """,
-                            [
-                                config.admin_user,
-                                config.admin_password,
-                                config.admin_email,
-                            ],
-                        )
-                    )
-                except Exception:
-                    submitted_superuser = False
 
                 if submitted_superuser:
                     _wait_dom_settled(page)
                     _log("[install] Submitted superuser form via form.requestSubmit().")
                 else:
+                    _fill_required_input(
+                        page,
+                        SUPERUSER_LOGIN_SELECTORS,
+                        config.admin_user,
+                        label="superuser login",
+                    )
+                    _fill_required_input(
+                        page,
+                        SUPERUSER_PASSWORD_SELECTORS,
+                        config.admin_password,
+                        label="superuser password",
+                    )
+                    _fill_optional_input(
+                        page, SUPERUSER_PASSWORD_REPEAT_SELECTORS, config.admin_password
+                    )
+                    _fill_required_input(
+                        page,
+                        SUPERUSER_EMAIL_SELECTORS,
+                        config.admin_email,
+                        label="superuser email",
+                    )
+                    _page_warnings(page)
+
                     submit_loc, submit_label = _first_present_css_locator(
                         page, SUPERUSER_SUBMIT_SELECTORS, timeout_s=0.5
                     )
@@ -875,10 +977,10 @@ class WebInstaller(Installer):
                 superuser_progress_deadline = time.time() + INSTALLER_STEP_TIMEOUT_S
                 while time.time() < superuser_progress_deadline:
                     _wait_dom_settled(page)
-                    if not _has_superuser_login_field(page):
+                    if not _superuser_form_ready(page):
                         break
                     page.wait_for_timeout(300)
-                if _has_superuser_login_field(page):
+                if _superuser_form_ready(page):
                     _page_warnings(page)
                     raise RuntimeError(
                         "Superuser form submit did not progress to first website setup "
