@@ -1,3 +1,8 @@
+## [1.1.13] - 2026-02-15
+
+* This release fixes the intermittent setupSuperUser bootstrap timeout by making superuser-form detection and submission more robust across timing and DOM variations, with added integration coverage and full passing E2E/integration tests.
+
+
 ## [1.1.12] - 2026-02-14
 
 * This release fixes the intermittent Matomo installer failure in the setupSuperUser step by adding more robust waiting logic and introduces E2E tests for deployments under very tight resource constraints.
